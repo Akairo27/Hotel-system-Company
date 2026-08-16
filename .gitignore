@@ -1,0 +1,51 @@
+# ===== Secrets — never commit =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*credentials*
+*secret*
+.supabase/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# ===== Node / Next.js =====
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+.vercel/
+
+# ===== Supabase local =====
+supabase/.branches/
+supabase/.temp/
+
+# ===== Editors / OS =====
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# ===== Logs =====
+*.log
+logs/
+npm-debug.log*
+
+# ===== Claude Code =====
+.claude/settings.local.json
+.claude/local/

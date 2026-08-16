@@ -1,0 +1,123 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+
+      "Edit(services/**)",
+      "Edit(admin/**)",
+      "Edit(lib/**)",
+      "Edit(tests/**)",
+      "Edit(docs/**)",
+      "Edit(db/seeds/**)",
+      "Write(services/**)",
+      "Write(admin/**)",
+      "Write(lib/**)",
+      "Write(tests/**)",
+      "Write(docs/**)",
+      "Write(db/seeds/**)",
+
+      "Bash(pytest *)",
+      "Bash(ruff *)",
+      "Bash(mypy *)",
+      "Bash(pre-commit run *)",
+      "Bash(npm run lint*)",
+      "Bash(npm run build*)",
+      "Bash(npm test*)",
+      "Bash(npx tsc*)",
+      "Bash(sqlfluff *)",
+
+      "Bash(supabase start*)",
+      "Bash(supabase stop*)",
+      "Bash(supabase status*)",
+      "Bash(supabase db reset*)",
+      "Bash(supabase migration new *)",
+      "Bash(supabase migration up*)",
+
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git branch*)",
+      "Bash(git checkout -b *)",
+      "Bash(git switch *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(mkdir *)",
+      "Bash(which *)"
+    ],
+
+    "ask": [
+      "Edit(.github/**)",
+      "Write(.github/**)",
+      "Edit(db/migrations/**)",
+      "Write(db/migrations/**)",
+      "Edit(services/pricing/**)",
+      "Edit(services/inventory/**)",
+      "Bash(git push*)",
+      "Bash(gh repo create*)",
+      "Bash(gh pr create*)",
+      "Bash(pip install *)",
+      "Bash(npm install *)",
+      "Bash(uv add *)"
+    ],
+
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*credentials*)",
+      "Read(**/*secret*)",
+      "Read(**/.ssh/**)",
+      "Edit(.env)",
+      "Edit(.env.*)",
+      "Edit(**/.env)",
+      "Write(.env)",
+      "Write(.env.*)",
+
+      "Edit(CLAUDE.md)",
+      "Write(CLAUDE.md)",
+      "Edit(.claude/**)",
+      "Write(.claude/**)",
+      "Edit(.gitignore)",
+      "Bash(git config *)",
+      "Edit(.pre-commit-config.yaml)",
+      "Edit(**/pyproject.toml)",
+      "Edit(**/package.json)",
+
+      "Bash(rm *)",
+      "Bash(rmdir *)",
+      "Bash(mv /*)",
+      "Bash(chmod *)",
+      "Bash(sudo *)",
+
+      "Bash(git push * main*)",
+      "Bash(git push origin main*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean *)",
+      "Bash(git rebase *)",
+      "Bash(git filter-branch*)",
+
+      "Bash(psql *)",
+      "Bash(supabase db push*)",
+      "Bash(supabase link*)",
+      "Bash(supabase secrets*)",
+
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(ssh *)",
+      "Bash(scp *)",
+      "Bash(docker *)",
+
+      "Bash(gh secret*)",
+      "Bash(gh auth*)",
+      "Bash(gh repo delete*)"
+    ]
+  }
+}
