@@ -1,0 +1,117 @@
+name: CI
+
+# Every gate that blocks a merge runs here. A red build is authoritative:
+# fix the cause, never the threshold.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.12.5"
+  GITLEAKS_VERSION: "8.30.1"
+  # sha256 of gitleaks_8.30.1_linux_x64.tar.gz, from the release checksums file.
+  GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+
+# Third-party actions are pinned to a commit SHA, not a tag — a tag can be
+# moved to point at different code after review.
+jobs:
+  python:
+    name: lint, types, tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Lockfile matches pyproject.toml
+        run: uv lock --check
+
+      - name: Install locked dependencies
+        run: uv sync --frozen
+
+      - name: ruff - lint
+        run: uv run ruff check .
+
+      - name: ruff - format
+        run: uv run ruff format --check .
+
+      - name: mypy --strict
+        run: uv run mypy
+
+      - name: pytest
+        run: uv run pytest --cov --cov-report=term-missing
+
+      # Two thresholds, enforced separately. coverage.py has no per-path
+      # option, so the same data file is reported twice.
+      - name: coverage - pricing and inventory at 100%
+        run: >-
+          uv run coverage report
+          --include="services/pricing/*,services/inventory/*"
+          --fail-under=100
+
+      - name: coverage - everything else at 80%
+        run: >-
+          uv run coverage report
+          --omit="services/pricing/*,services/inventory/*"
+          --fail-under=80
+
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # gitleaks scans history, not just the tip.
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+
+      - name: Scan repository history
+        run: ./gitleaks git . --redact --verbose
+
+  dependencies:
+    name: dependency audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install locked dependencies
+        run: uv sync --frozen
+
+      - name: pip-audit
+        run: uv run pip-audit
+
+  migrations:
+    name: migrations lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install locked dependencies
+        run: uv sync --frozen
+
+      - name: sqlfluff
+        run: uv run sqlfluff lint db/migrations

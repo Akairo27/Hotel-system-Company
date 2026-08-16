@@ -1,0 +1,37 @@
+# Local fast feedback. CI re-runs every one of these; nothing here is a
+# substitute for the build. Revisions are exact — never a floating tag.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # CLAUDE.md section 7: main is never written to directly.
+      - id: no-commit-to-branch
+        args: [--branch, main]
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: check-yaml
+      - id: check-toml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.3
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.3.1
+    hooks:
+      - id: mypy
+        # mypy resolves its own file set from pyproject.toml; passing the
+        # staged filenames would type-check them out of package context.
+        pass_filenames: false
+        additional_dependencies: ["pytest==9.1.1"]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks

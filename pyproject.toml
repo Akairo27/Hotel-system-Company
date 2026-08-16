@@ -1,0 +1,86 @@
+[project]
+name = "hotel-sales-agent"
+version = "0.1.0"
+description = "Automated hotel room sales system"
+# Pinned to a single minor version so local and CI resolve identically.
+requires-python = ">=3.14,<3.15"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "ruff==0.16.3",
+    "mypy==2.3.1",
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "pre-commit==4.6.2",
+    "pip-audit==2.10.1",
+    "sqlfluff==4.3.0",
+]
+
+[tool.uv]
+# Nothing here is distributed as a wheel; services run from the source tree.
+package = false
+
+# ---------------------------------------------------------------------------
+# ruff — lint + format
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+line-length = 88
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # import sorting
+    "N",    # pep8 naming
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "A",    # shadowed builtins
+    "C4",   # comprehensions
+    "DTZ",  # naive datetimes — every timestamp in this system is UTC-aware
+    "T20",  # print statements — logging is structured JSON only
+    "SIM",  # simplifications
+    "ARG",  # unused arguments
+    "PTH",  # pathlib over os.path
+    "ERA",  # commented-out code — CLAUDE.md forbids it outright
+    "S",    # bandit security checks
+    "RUF",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert; that is their job.
+"tests/**" = ["S101"]
+
+# ---------------------------------------------------------------------------
+# mypy — strict everywhere, no exceptions
+# ---------------------------------------------------------------------------
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+warn_unreachable = true
+files = ["services", "lib", "tests"]
+# A bare `# type: ignore` hides which rule was silenced; require the code.
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+
+# ---------------------------------------------------------------------------
+# coverage — thresholds are enforced in CI, per-path (see .github/workflows)
+# ---------------------------------------------------------------------------
+
+[tool.coverage.run]
+branch = true
+source = ["services", "lib"]
+
+[tool.coverage.report]
+show_missing = true
