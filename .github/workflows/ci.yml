@@ -82,7 +82,7 @@ jobs:
           tar -xzf gitleaks.tar.gz gitleaks
 
       - name: Scan repository history
-        run: ./gitleaks git . --redact --verbose
+        run: ./gitleaks git . --config .gitleaks.toml --redact --verbose
 
   dependencies:
     name: dependency audit
