@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Automated hotel room sales system"
 # Pinned to a single minor version so local and CI resolve identically.
 requires-python = ">=3.14,<3.15"
-dependencies = []
+dependencies = [
+    "psycopg[binary]==3.3.4",
+]
 
 [dependency-groups]
 dev = [
