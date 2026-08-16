@@ -1,0 +1,14 @@
+# The default ruleset is inherited in full. No rule is disabled.
+#
+# The one allowlist below is scoped by BOTH the value and the file, so the same
+# string in any code file still fails the scan — including the deliberate
+# gate-verification exercise in SETUP.md section 5, which lives in tests/.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Fake API key printed as an example in SETUP.md section 5"
+condition = "AND"
+regexTarget = "line"
+regexes = ['''sk-test-1234567890abcdef''']
+paths = ['''^SETUP\.md$''']
