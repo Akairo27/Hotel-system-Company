@@ -146,10 +146,54 @@ def test_holds_cannot_be_released_and_confirmed_at_once(
     ):
         db_conn.execute(
             "INSERT INTO holds (hotel_id, room_type_id, check_in, check_out, rooms, "
-            "expires_at, released_at, confirmed_at) "
-            "VALUES (%s, %s, '2026-09-01', '2026-09-02', 1, now(), now(), now())",
+            "expires_at, released_at, confirmed_at, requires_full_payment, "
+            "idempotency_key) "
+            "VALUES (%s, %s, '2026-09-01', '2026-09-02', 1, now(), now(), now(), "
+            "false, 'released-and-confirmed')",
             (hotel_id, room_type_id),
         )
+
+
+def test_holds_idempotency_key_must_be_unique(db_conn: psycopg.Connection[Any]) -> None:
+    hotel_id = _returning_id(
+        db_conn, "INSERT INTO hotels (hotel_name) VALUES ('Test Hotel') RETURNING id"
+    )
+    room_type_id = _returning_id(
+        db_conn,
+        "INSERT INTO room_types (hotel_id, room_type_name) VALUES (%s, 'Standard') "
+        "RETURNING id",
+        (hotel_id,),
+    )
+    db_conn.execute(
+        "INSERT INTO holds (hotel_id, room_type_id, check_in, check_out, rooms, "
+        "expires_at, requires_full_payment, idempotency_key) "
+        "VALUES (%s, %s, '2026-09-01', '2026-09-02', 1, now(), false, 'dup-key')",
+        (hotel_id, room_type_id),
+    )
+
+    with pytest.raises(
+        psycopg.errors.UniqueViolation, match="holds_idempotency_key_unique"
+    ):
+        db_conn.execute(
+            "INSERT INTO holds (hotel_id, room_type_id, check_in, check_out, rooms, "
+            "expires_at, requires_full_payment, idempotency_key) "
+            "VALUES (%s, %s, '2026-09-03', '2026-09-04', 1, now(), false, 'dup-key')",
+            (hotel_id, room_type_id),
+        )
+
+
+def test_holds_expires_at_is_timezone_aware(db_conn: psycopg.Connection[Any]) -> None:
+    """confirm_hold compares `now >= expires_at` with a timezone-aware `now`
+    (services/inventory/hold_windows.py enforces that at the boundary). If
+    this column were ever changed to a naive `timestamp`, psycopg would
+    return a naive datetime and that comparison would raise TypeError —
+    see CLAUDE.md rule 6: every timestamp in this system is UTC-aware.
+    """
+    row = db_conn.execute(
+        "SELECT data_type FROM information_schema.columns "
+        "WHERE table_name = 'holds' AND column_name = 'expires_at'"
+    ).fetchone()
+    assert row == ("timestamp with time zone",)
 
 
 def test_hold_room_type_must_belong_to_its_hotel(
@@ -173,7 +217,9 @@ def test_hold_room_type_must_belong_to_its_hotel(
     with pytest.raises(psycopg.errors.ForeignKeyViolation):
         db_conn.execute(
             "INSERT INTO holds (hotel_id, room_type_id, check_in, check_out, rooms, "
-            "expires_at) VALUES (%s, %s, '2026-09-01', '2026-09-02', 1, now())",
+            "expires_at, requires_full_payment, idempotency_key) "
+            "VALUES (%s, %s, '2026-09-01', '2026-09-02', 1, now(), false, "
+            "'cross-hotel-room-type')",
             (other_hotel_id, room_type_id),
         )
 

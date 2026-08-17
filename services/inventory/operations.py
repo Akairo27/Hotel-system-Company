@@ -16,10 +16,13 @@ import psycopg
 
 from services.inventory.errors import (
     AllotmentNotFoundError,
+    DuplicateHoldRequestError,
+    FullPaymentRequiredError,
     HoldAlreadyResolvedError,
     HoldExpiredError,
     HoldNotFoundError,
     InsufficientInventoryError,
+    RoomNightCountMismatchError,
 )
 from services.inventory.hold_windows import hold_window_for
 
@@ -110,12 +113,23 @@ def _adjust_room_nights(
     *,
     held_delta: int,
     reserved_delta: int,
+    expected_nights: int,
 ) -> None:
     """Applies held/reserved deltas across every night of the stay. Deltas
     may be negative — callers hold the row locks that make this safe.
+
+    Raises:
+        RoomNightCountMismatchError: the UPDATE touched fewer rows than
+            expected_nights. Without this check, a night missing from the
+            range would silently absorb the delta on fewer rows than it was
+            applied on the way in, leaving held or reserved permanently off
+            by the untouched night's share — never surfaced, only
+            accumulating. Callers are expected to have already locked
+            exactly expected_nights rows via _lock_nights_for_update, so
+            this is a backstop, not the primary defense.
     """
     params = _range_params(hotel_id, room_type_id, check_in, check_out)
-    conn.execute(
+    cursor = conn.execute(
         "UPDATE room_night_inventory rni "
         "SET held = held + %(held_delta)s, reserved = reserved + %(reserved_delta)s "
         "FROM allotments a "
@@ -124,6 +138,12 @@ def _adjust_room_nights(
         "AND rni.stay_date >= %(check_in)s AND rni.stay_date < %(check_out)s",
         {**params, "held_delta": held_delta, "reserved_delta": reserved_delta},
     )
+    if cursor.rowcount != expected_nights:
+        raise RoomNightCountMismatchError(
+            f"expected to adjust {expected_nights} room-night rows for hotel "
+            f"{hotel_id}/room type {room_type_id} between {check_in} and {check_out}, "
+            f"but affected {cursor.rowcount}"
+        )
 
 
 def create_hold(
@@ -134,20 +154,35 @@ def create_hold(
     check_out: date,
     rooms: int,
     now: datetime,
+    *,
+    idempotency_key: str,
 ) -> int:
     """Creates a temporary hold across every night of the stay, in one
     transaction, per ARCHITECTURE.md §6.
+
+    idempotency_key must be unique per request (e.g. derived from the
+    WhatsApp message_id). Calling this twice with the same key returns the
+    id of the hold created the first time, without incrementing held again
+    — a retried request must never create a second hold.
 
     Raises:
         AllotmentNotFoundError: a night in the range has no allotment.
         InsufficientInventoryError: the database rejected the hold as an
             oversell — inventory_never_oversold is the actual authority.
+        DuplicateHoldRequestError: a concurrent request with the same
+            idempotency_key won the race to insert first.
     """
     expected_nights = _nights_count(check_in, check_out)
     if rooms <= 0:
         raise ValueError("rooms must be positive")
 
     with conn.transaction():
+        existing = conn.execute(
+            "SELECT id FROM holds WHERE idempotency_key = %s", (idempotency_key,)
+        ).fetchone()
+        if existing is not None:
+            return int(existing[0])
+
         _lock_nights_for_update(
             conn, hotel_id, room_type_id, check_in, check_out, expected_nights
         )
@@ -160,6 +195,7 @@ def create_hold(
                 check_out,
                 held_delta=rooms,
                 reserved_delta=0,
+                expected_nights=expected_nights,
             )
         except psycopg.errors.CheckViolation as exc:
             raise InsufficientInventoryError(
@@ -168,22 +204,38 @@ def create_hold(
             ) from exc
 
         window = hold_window_for(check_in, now)
-        hold_row = conn.execute(
-            "INSERT INTO holds (hotel_id, room_type_id, check_in, check_out, rooms, "
-            "expires_at) VALUES (%(hotel_id)s, %(room_type_id)s, %(check_in)s, "
-            "%(check_out)s, %(rooms)s, %(expires_at)s) RETURNING id",
-            {
-                **_range_params(hotel_id, room_type_id, check_in, check_out),
-                "rooms": rooms,
-                "expires_at": now + window.duration,
-            },
-        ).fetchone()
+        try:
+            hold_row = conn.execute(
+                "INSERT INTO holds (hotel_id, room_type_id, check_in, check_out, "
+                "rooms, expires_at, requires_full_payment, idempotency_key) VALUES "
+                "(%(hotel_id)s, %(room_type_id)s, %(check_in)s, %(check_out)s, "
+                "%(rooms)s, %(expires_at)s, %(requires_full_payment)s, "
+                "%(idempotency_key)s) RETURNING id",
+                {
+                    **_range_params(hotel_id, room_type_id, check_in, check_out),
+                    "rooms": rooms,
+                    "expires_at": now + window.duration,
+                    "requires_full_payment": window.requires_full_payment,
+                    "idempotency_key": idempotency_key,
+                },
+            ).fetchone()
+        except psycopg.errors.UniqueViolation as exc:
+            raise DuplicateHoldRequestError(
+                f"a hold with idempotency_key {idempotency_key!r} was already "
+                "created by a concurrent request"
+            ) from exc
         # A successful single-row INSERT ... RETURNING always yields a row;
         # this reflects that guarantee rather than handling a real case.
         return int(cast(tuple[Any, ...], hold_row)[0])
 
 
-def confirm_hold(conn: psycopg.Connection[Any], hold_id: int, now: datetime) -> None:
+def confirm_hold(
+    conn: psycopg.Connection[Any],
+    hold_id: int,
+    now: datetime,
+    *,
+    payment_received_in_full: bool,
+) -> None:
     """Moves a hold's rooms from held to reserved, after payment
     confirmation. Cash on arrival is never confirmed here — ARCHITECTURE.md
     §6 routes that to a human escalation instead.
@@ -192,11 +244,15 @@ def confirm_hold(conn: psycopg.Connection[Any], hold_id: int, now: datetime) -> 
         HoldNotFoundError: no hold with this id exists.
         HoldAlreadyResolvedError: the hold was already released or confirmed.
         HoldExpiredError: now is at or past the hold's expiry.
+        FullPaymentRequiredError: the hold's window required full payment
+            up front (see hold_windows.py) and payment_received_in_full is
+            False — this must escalate to a human, not confirm silently.
     """
     with conn.transaction():
         row = conn.execute(
             "SELECT hotel_id, room_type_id, check_in, check_out, rooms, expires_at, "
-            "released_at, confirmed_at FROM holds WHERE id = %s FOR UPDATE",
+            "released_at, confirmed_at, requires_full_payment "
+            "FROM holds WHERE id = %s FOR UPDATE",
             (hold_id,),
         ).fetchone()
         if row is None:
@@ -210,13 +266,23 @@ def confirm_hold(conn: psycopg.Connection[Any], hold_id: int, now: datetime) -> 
             expires_at,
             released_at,
             confirmed_at,
+            requires_full_payment,
         ) = row
 
         if released_at is not None or confirmed_at is not None:
             raise HoldAlreadyResolvedError(f"hold {hold_id} was already resolved")
         if now >= expires_at:
             raise HoldExpiredError(f"hold {hold_id} expired at {expires_at}")
+        if requires_full_payment and not payment_received_in_full:
+            raise FullPaymentRequiredError(
+                f"hold {hold_id} requires full payment before confirmation "
+                "— escalate to a human instead of confirming without it"
+            )
 
+        expected_nights = _nights_count(check_in, check_out)
+        _lock_nights_for_update(
+            conn, hotel_id, room_type_id, check_in, check_out, expected_nights
+        )
         _adjust_room_nights(
             conn,
             hotel_id,
@@ -225,6 +291,7 @@ def confirm_hold(conn: psycopg.Connection[Any], hold_id: int, now: datetime) -> 
             check_out,
             held_delta=-rooms,
             reserved_delta=rooms,
+            expected_nights=expected_nights,
         )
         conn.execute("UPDATE holds SET confirmed_at = %s WHERE id = %s", (now, hold_id))
 
@@ -253,6 +320,10 @@ def release_hold(conn: psycopg.Connection[Any], hold_id: int, now: datetime) -> 
             raise HoldAlreadyResolvedError(f"hold {hold_id} was already resolved")
 
         hotel_id, room_type_id, check_in, check_out, rooms = released
+        expected_nights = _nights_count(check_in, check_out)
+        _lock_nights_for_update(
+            conn, hotel_id, room_type_id, check_in, check_out, expected_nights
+        )
         _adjust_room_nights(
             conn,
             hotel_id,
@@ -261,4 +332,5 @@ def release_hold(conn: psycopg.Connection[Any], hold_id: int, now: datetime) -> 
             check_out,
             held_delta=-rooms,
             reserved_delta=0,
+            expected_nights=expected_nights,
         )
