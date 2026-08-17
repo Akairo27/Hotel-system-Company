@@ -50,7 +50,14 @@ def test_release_expired_holds_releases_expired_unresolved_holds(
         db_conn, hotel_id, room_type_id, _CHECK_IN, nights=1, total_rooms=2
     )
     hold_id = create_hold(
-        db_conn, hotel_id, room_type_id, _CHECK_IN, _CHECK_OUT, 2, _NOW
+        db_conn,
+        hotel_id,
+        room_type_id,
+        _CHECK_IN,
+        _CHECK_OUT,
+        2,
+        _NOW,
+        idempotency_key="expiry-releases",
     )
     _backdate_expiry(db_conn, hold_id, _NOW - timedelta(minutes=1))
 
@@ -68,7 +75,16 @@ def test_release_expired_holds_ignores_holds_not_yet_expired(
     seed_allotment_nights(
         db_conn, hotel_id, room_type_id, _CHECK_IN, nights=1, total_rooms=2
     )
-    create_hold(db_conn, hotel_id, room_type_id, _CHECK_IN, _CHECK_OUT, 2, _NOW)
+    create_hold(
+        db_conn,
+        hotel_id,
+        room_type_id,
+        _CHECK_IN,
+        _CHECK_OUT,
+        2,
+        _NOW,
+        idempotency_key="expiry-not-yet",
+    )
 
     released = release_expired_holds(db_conn, _NOW)
 
@@ -85,9 +101,16 @@ def test_release_expired_holds_skips_already_confirmed_holds(
         db_conn, hotel_id, room_type_id, _CHECK_IN, nights=1, total_rooms=2
     )
     hold_id = create_hold(
-        db_conn, hotel_id, room_type_id, _CHECK_IN, _CHECK_OUT, 2, _NOW
+        db_conn,
+        hotel_id,
+        room_type_id,
+        _CHECK_IN,
+        _CHECK_OUT,
+        2,
+        _NOW,
+        idempotency_key="skips-confirmed",
     )
-    confirm_hold(db_conn, hold_id, _NOW)
+    confirm_hold(db_conn, hold_id, _NOW, payment_received_in_full=True)
     _backdate_expiry(db_conn, hold_id, _NOW - timedelta(minutes=1))
 
     released = release_expired_holds(db_conn, _NOW)
@@ -115,12 +138,21 @@ def test_release_expired_holds_skips_a_hold_resolved_by_a_race(
         db_conn, hotel_id, room_type_id, _CHECK_IN, nights=1, total_rooms=2
     )
     hold_id = create_hold(
-        db_conn, hotel_id, room_type_id, _CHECK_IN, _CHECK_OUT, 2, _NOW
+        db_conn,
+        hotel_id,
+        room_type_id,
+        _CHECK_IN,
+        _CHECK_OUT,
+        2,
+        _NOW,
+        idempotency_key="race-with-worker",
     )
     _backdate_expiry(db_conn, hold_id, _NOW - timedelta(minutes=1))
     # Confirm before the hold is technically expired, simulating a payment
     # that landed moments before the worker's release would have run.
-    confirm_hold(db_conn, hold_id, _NOW - timedelta(minutes=2))
+    confirm_hold(
+        db_conn, hold_id, _NOW - timedelta(minutes=2), payment_received_in_full=True
+    )
 
     released = release_expired_holds(db_conn, _NOW)
 
@@ -137,9 +169,16 @@ def test_release_expired_holds_one_already_resolved_does_not_block_the_rest(
         db_conn, hotel_a, room_type_a, _CHECK_IN, nights=1, total_rooms=1
     )
     resolved_hold = create_hold(
-        db_conn, hotel_a, room_type_a, _CHECK_IN, _CHECK_OUT, 1, _NOW
+        db_conn,
+        hotel_a,
+        room_type_a,
+        _CHECK_IN,
+        _CHECK_OUT,
+        1,
+        _NOW,
+        idempotency_key="rest-not-blocked-resolved",
     )
-    confirm_hold(db_conn, resolved_hold, _NOW)
+    confirm_hold(db_conn, resolved_hold, _NOW, payment_received_in_full=True)
     _backdate_expiry(db_conn, resolved_hold, _NOW - timedelta(minutes=1))
 
     hotel_b, room_type_b = seed_hotel_and_room_type(db_conn)
@@ -147,7 +186,14 @@ def test_release_expired_holds_one_already_resolved_does_not_block_the_rest(
         db_conn, hotel_b, room_type_b, _CHECK_IN, nights=1, total_rooms=1
     )
     open_hold = create_hold(
-        db_conn, hotel_b, room_type_b, _CHECK_IN, _CHECK_OUT, 1, _NOW
+        db_conn,
+        hotel_b,
+        room_type_b,
+        _CHECK_IN,
+        _CHECK_OUT,
+        1,
+        _NOW,
+        idempotency_key="rest-not-blocked-open",
     )
     _backdate_expiry(db_conn, open_hold, _NOW - timedelta(minutes=1))
 

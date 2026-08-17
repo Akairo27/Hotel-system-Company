@@ -36,3 +36,36 @@ class HoldAlreadyResolvedError(InventoryError):
 
 class HoldExpiredError(InventoryError):
     """Raised when confirming a hold whose expiry has already passed."""
+
+
+class FullPaymentRequiredError(InventoryError):
+    """Raised when confirming a hold that requires full payment up front
+    (ARCHITECTURE.md §6's last-minute hold window) but the caller has not
+    indicated payment was received in full.
+
+    This must route to a human escalation, never a silent auto-confirm —
+    see CLAUDE.md rule 10 on anything touching booking confirmation.
+    """
+
+
+class RoomNightCountMismatchError(InventoryError):
+    """Raised when a held/reserved adjustment affects a different number of
+    room_night_inventory rows than the stay's expected night count.
+
+    A mismatch means part of the range has no inventory row to absorb the
+    adjustment, which would otherwise let held or reserved drift out of
+    sync with the rooms actually on hold — silently, since the UPDATE
+    itself does not fail. See CLAUDE.md rule 3: application-level checks
+    exist to fail fast and loud, not to be skipped.
+    """
+
+
+class DuplicateHoldRequestError(InventoryError):
+    """Raised when two hold requests race on the same idempotency_key and
+    both reach the INSERT — the database's unique constraint on
+    holds.idempotency_key rejected the second one.
+
+    The caller should look up the existing hold by idempotency_key rather
+    than retry blindly; a duplicate WhatsApp message_id must never produce
+    a second hold.
+    """
