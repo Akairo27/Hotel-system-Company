@@ -47,20 +47,6 @@ _RAMADAN = Season(
     is_default=False,
 )
 
-# Same intent, expressed the naive way an admin might type it: end_day=30
-# for a month that isn't always 30 days. Demonstrates the clamp + exclusive-
-# end interaction: this silently drops the true last day in a short year.
-_RAMADAN_NAIVE_END = Season(
-    id=4,
-    calendar_type="hijri",
-    start_month=9,
-    start_day=1,
-    end_month=9,
-    end_day=30,
-    priority=4,
-    is_default=False,
-)
-
 _HIJRI_NEW_YEAR = Season(
     id=5,
     calendar_type="hijri",
@@ -78,8 +64,34 @@ _FEBRUARY = Season(
     start_month=2,
     start_day=1,
     end_month=2,
-    end_day=30,  # doesn't exist — clamps to the real last day
+    end_day=30,  # doesn't exist — rolls over to March 1
     priority=6,
+    is_default=False,
+)
+
+# Two of the client's actual season definitions, exactly as configured:
+# end_day=30 for Hijri months that are sometimes 29 days. This is real
+# production data, not a hypothetical — season_contains must treat day 30
+# as "through the end of the month" in every year, short or long.
+_SHAWWAL = Season(
+    id=7,
+    calendar_type="hijri",
+    start_month=10,
+    start_day=1,
+    end_month=10,
+    end_day=30,
+    priority=7,
+    is_default=False,
+)
+
+_DHU_AL_HIJJAH_TAIL = Season(
+    id=8,
+    calendar_type="hijri",
+    start_month=12,
+    start_day=20,
+    end_month=12,
+    end_day=30,
+    priority=8,
     is_default=False,
 )
 
@@ -134,19 +146,39 @@ def test_hijri_season_wraps_hijri_new_year() -> None:
     assert not season_contains(_HIJRI_NEW_YEAR, date(2026, 6, 16))  # end exclusive
 
 
-def test_hijri_end_day_clamps_and_can_exclude_the_true_last_day() -> None:
-    """Ramadan 1440 AH has only 29 days. A season configured with
-    end_day=30 (a plausible admin mistake) clamps to day 29 — but since
-    the end is exclusive, day 29 itself (the actual last day of Ramadan
-    that year) ends up excluded. This is why a season meant to cover a
-    whole variable-length month should be defined as start-of-next-month,
-    like _RAMADAN above, not day 29/30 of the same month.
-    """
-    assert season_contains(_RAMADAN_NAIVE_END, date(2019, 6, 2))  # day 28
-    assert not season_contains(_RAMADAN_NAIVE_END, date(2019, 6, 3))  # day 29
-
-
-def test_gregorian_end_day_clamps_to_the_real_month_length() -> None:
-    # February 2026 has 28 days (not a leap year); end_day=30 clamps to 28.
+def test_gregorian_end_day_beyond_month_rolls_to_next_month() -> None:
+    # February 2026 has 28 days (not a leap year); end_day=30 rolls over
+    # to March 1, so February 28 — the real last day — is included.
     assert season_contains(_FEBRUARY, date(2026, 2, 27))
-    assert not season_contains(_FEBRUARY, date(2026, 2, 28))
+    assert season_contains(_FEBRUARY, date(2026, 2, 28))
+    assert not season_contains(_FEBRUARY, date(2026, 3, 1))  # end exclusive
+
+
+def test_hijri_end_day_30_covers_the_whole_month_in_a_29_day_year() -> None:
+    # Shawwal 1447 AH has 29 days: 2026-03-20 -> 2026-04-17 (verified).
+    assert season_contains(_SHAWWAL, date(2026, 3, 20))  # start
+    assert season_contains(_SHAWWAL, date(2026, 4, 17))  # real last day
+    assert not season_contains(_SHAWWAL, date(2026, 4, 18))  # next month
+
+
+def test_hijri_end_day_30_covers_the_whole_month_in_a_30_day_year() -> None:
+    # Shawwal 1440 AH has 30 days: 2019-06-04 -> 2019-07-03 (verified).
+    assert season_contains(_SHAWWAL, date(2019, 6, 4))  # start
+    assert season_contains(_SHAWWAL, date(2019, 7, 3))  # real last day
+    assert not season_contains(_SHAWWAL, date(2019, 7, 4))  # next month
+
+
+def test_hijri_end_day_30_covers_a_month_ending_at_hijri_new_year() -> None:
+    """Dhu al-Hijjah is the last Hijri month — "through its end" lands in
+    Muharram of the *following* AH year. 1447 AH: Dhu al-Hijjah has 29
+    days, 2026-06-06 -> 2026-06-15 (verified)."""
+    assert season_contains(_DHU_AL_HIJJAH_TAIL, date(2026, 6, 6))  # start
+    assert season_contains(_DHU_AL_HIJJAH_TAIL, date(2026, 6, 15))  # last day
+    assert not season_contains(_DHU_AL_HIJJAH_TAIL, date(2026, 6, 16))
+
+
+def test_hijri_end_day_30_covers_a_30_day_month_ending_at_hijri_new_year() -> None:
+    # 1443 AH: Dhu al-Hijjah has 30 days, 2022-07-19 -> 2022-07-29 (verified).
+    assert season_contains(_DHU_AL_HIJJAH_TAIL, date(2022, 7, 19))  # start
+    assert season_contains(_DHU_AL_HIJJAH_TAIL, date(2022, 7, 29))  # last day
+    assert not season_contains(_DHU_AL_HIJJAH_TAIL, date(2022, 7, 30))

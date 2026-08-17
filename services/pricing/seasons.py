@@ -40,23 +40,54 @@ class Season:
     is_default: bool
 
 
-def _clamped_day(calendar_type: str, year: int, month: int, day: int) -> int:
-    """Clamps a generic 1-31 day to the actual length of that month/year,
-    so a boundary like "end of Ramadan" (day 30) resolves to the real
-    last day even in a 29-day year, and "end of April" (day 31) resolves
-    to April 30. See db/migrations/0002_seasons.sql's note that this
-    validity check is a pricing-engine concern, not a migration-time one.
+def _clamp_to_month(calendar_type: str, year: int, month: int, day: int) -> date:
+    """Clamps day down to the real last day of (year, month) if day
+    exceeds it. Correct for a season's START boundary (inclusive):
+    "start on the last day of Ramadan" should land on whatever that real
+    last day is (29 or 30, depending on the year), not roll into the
+    next month.
     """
     if calendar_type == "hijri":
-        return min(day, hijri_month_length(year, month))
-    return min(day, monthrange(year, month)[1])
-
-
-def _instance_date(calendar_type: str, year: int, month: int, day: int) -> date:
-    clamped = _clamped_day(calendar_type, year, month, day)
-    if calendar_type == "hijri":
+        clamped = min(day, hijri_month_length(year, month))
         return from_hijri(year, month, clamped)
+    clamped = min(day, monthrange(year, month)[1])
     return date(year, month, clamped)
+
+
+def _month_absolute_max(calendar_type: str, month: int) -> int:
+    """The largest day that month could ever have, in any year: 30 for
+    every Hijri month (none ever exceeds 30 days), or the Gregorian
+    month's true maximum (29 for February, accounting for leap years —
+    monthrange only depends on the year for February, so a fixed
+    reference leap year gives the right answer for every month)."""
+    if calendar_type == "hijri":
+        return 30
+    return monthrange(2000, month)[1]
+
+
+def _roll_to_next_month(year: int, month: int) -> tuple[int, int]:
+    return (year + 1, 1) if month == 12 else (year, month + 1)
+
+
+def _end_instance_date(calendar_type: str, year: int, month: int, day: int) -> date:
+    """Resolves a season's END boundary (exclusive).
+
+    A day at or beyond the absolute maximum for that month is a
+    "through the end of the month" sentinel, not a literal calendar
+    date — two of this system's real client seasons are configured as
+    "1-30 Shawwal" and "20-30 Dhu al-Hijjah", and Hijri months are 29 or
+    30 days depending on the year, never fixed. Resolving day 30 within
+    the same month would, combined with the exclusive boundary, silently
+    exclude the true last day in a 29-day year — so instead this rolls
+    over to day 1 of the *next* month, which correctly captures "through
+    the end" regardless of that year's actual month length. Clamping
+    (used for START boundaries) would be wrong here: it would exclude the
+    real last day every time, not just in short years.
+    """
+    if day < _month_absolute_max(calendar_type, month):
+        return _clamp_to_month(calendar_type, year, month, day)
+    next_year, next_month = _roll_to_next_month(year, month)
+    return _clamp_to_month(calendar_type, next_year, next_month, 1)
 
 
 def _wraps_year(start_month: int, start_day: int, end_month: int, end_day: int) -> bool:
@@ -69,14 +100,14 @@ def _wraps_year(start_month: int, start_day: int, end_month: int, end_day: int) 
 def _season_instance(season: Season, anchor_year: int) -> tuple[date, date]:
     """The concrete [start, end) window for the occurrence of `season`
     whose start falls in `anchor_year`, in the season's own calendar."""
-    start = _instance_date(
+    start = _clamp_to_month(
         season.calendar_type, anchor_year, season.start_month, season.start_day
     )
     wraps = _wraps_year(
         season.start_month, season.start_day, season.end_month, season.end_day
     )
     end_year = anchor_year + 1 if wraps else anchor_year
-    end = _instance_date(
+    end = _end_instance_date(
         season.calendar_type, end_year, season.end_month, season.end_day
     )
     return start, end
