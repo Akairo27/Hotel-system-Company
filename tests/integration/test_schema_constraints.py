@@ -271,3 +271,163 @@ def test_service_role_bypasses_rls(db_conn: psycopg.Connection[Any]) -> None:
         assert len(rows) == 1
     finally:
         db_conn.execute("RESET SESSION AUTHORIZATION")
+
+
+def test_price_rules_only_one_global_rule_allowed(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    db_conn.execute(
+        "INSERT INTO price_rules (scope, target_margin_bps, min_profit_by_lead_time, "
+        "demand_curve) VALUES ('global', 3000, '{}'::jsonb, '{}'::jsonb)"
+    )
+
+    with pytest.raises(
+        psycopg.errors.UniqueViolation, match="price_rules_single_global"
+    ):
+        db_conn.execute(
+            "INSERT INTO price_rules (scope, target_margin_bps, "
+            "min_profit_by_lead_time, demand_curve) "
+            "VALUES ('global', 4000, '{}'::jsonb, '{}'::jsonb)"
+        )
+
+
+def test_price_rules_scope_id_must_be_null_for_global(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    hotel_id = _returning_id(
+        db_conn, "INSERT INTO hotels (hotel_name) VALUES ('Test Hotel') RETURNING id"
+    )
+
+    with pytest.raises(
+        psycopg.errors.CheckViolation, match="price_rules_scope_id_matches_scope"
+    ):
+        db_conn.execute(
+            "INSERT INTO price_rules (scope, scope_id, target_margin_bps, "
+            "min_profit_by_lead_time, demand_curve) "
+            "VALUES ('global', %s, 3000, '{}'::jsonb, '{}'::jsonb)",
+            (hotel_id,),
+        )
+
+
+def test_price_rules_scope_id_required_for_non_global_scope(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    with pytest.raises(
+        psycopg.errors.CheckViolation, match="price_rules_scope_id_matches_scope"
+    ):
+        db_conn.execute(
+            "INSERT INTO price_rules (scope, scope_id, target_margin_bps) "
+            "VALUES ('hotel', NULL, 3000)"
+        )
+
+
+def test_price_rules_global_rule_must_set_every_field(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    """The global rule is the base of the inheritance chain — it has
+    nothing to fall through to, so a partially-configured global rule
+    would leave some field unresolvable for every other scope."""
+    with pytest.raises(
+        psycopg.errors.CheckViolation, match="price_rules_global_is_complete"
+    ):
+        db_conn.execute(
+            "INSERT INTO price_rules (scope, target_margin_bps) VALUES ('global', 3000)"
+        )
+
+
+def test_price_overrides_min_allowed_cannot_exceed_ask(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    hotel_id = _returning_id(
+        db_conn, "INSERT INTO hotels (hotel_name) VALUES ('Test Hotel') RETURNING id"
+    )
+    room_type_id = _returning_id(
+        db_conn,
+        "INSERT INTO room_types (hotel_id, room_type_name) VALUES (%s, 'Standard') "
+        "RETURNING id",
+        (hotel_id,),
+    )
+
+    with pytest.raises(
+        psycopg.errors.CheckViolation, match="price_overrides_min_allowed_not_above_ask"
+    ):
+        db_conn.execute(
+            "INSERT INTO price_overrides (hotel_id, room_type_id, stay_date, "
+            "ask_price_override, min_allowed_override, expires_at) "
+            "VALUES (%s, %s, '2026-09-01', 10000, 20000, now())",
+            (hotel_id, room_type_id),
+        )
+
+
+def test_quotes_min_allowed_cannot_exceed_ask(db_conn: psycopg.Connection[Any]) -> None:
+    hotel_id = _returning_id(
+        db_conn, "INSERT INTO hotels (hotel_name) VALUES ('Test Hotel') RETURNING id"
+    )
+    room_type_id = _returning_id(
+        db_conn,
+        "INSERT INTO room_types (hotel_id, room_type_name) VALUES (%s, 'Standard') "
+        "RETURNING id",
+        (hotel_id,),
+    )
+
+    with pytest.raises(
+        psycopg.errors.CheckViolation, match="quotes_min_allowed_not_above_ask"
+    ):
+        db_conn.execute(
+            "INSERT INTO quotes (hotel_id, room_type_id, check_in, check_out, rooms, "
+            "ask_price_total, min_allowed_total, nights, negotiation_open) "
+            "VALUES (%s, %s, '2026-09-01', '2026-09-02', 1, 10000, 20000, '[]'::jsonb, "
+            "true)",
+            (hotel_id, room_type_id),
+        )
+
+
+def _seed_quote(db_conn: psycopg.Connection[Any]) -> int:
+    hotel_id = _returning_id(
+        db_conn, "INSERT INTO hotels (hotel_name) VALUES ('Test Hotel') RETURNING id"
+    )
+    room_type_id = _returning_id(
+        db_conn,
+        "INSERT INTO room_types (hotel_id, room_type_name) VALUES (%s, 'Standard') "
+        "RETURNING id",
+        (hotel_id,),
+    )
+    return _returning_id(
+        db_conn,
+        "INSERT INTO quotes (hotel_id, room_type_id, check_in, check_out, rooms, "
+        "ask_price_total, min_allowed_total, nights, negotiation_open) "
+        "VALUES (%s, %s, '2026-09-01', '2026-09-02', 1, 20000, 10000, '[]'::jsonb, "
+        "true) RETURNING id",
+        (hotel_id, room_type_id),
+    )
+
+
+def test_quotes_is_append_only_update_rejected(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    """quotes is INSERT-only per ARCHITECTURE.md §4 — enforced by never
+    granting service_role UPDATE on this table, not by application
+    discipline. See CLAUDE.md rule 3: the constraint is the authority."""
+    quote_id = _seed_quote(db_conn)
+
+    db_conn.execute("SET SESSION AUTHORIZATION service_role")
+    try:
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            db_conn.execute(
+                "UPDATE quotes SET ask_price_total = 1 WHERE id = %s", (quote_id,)
+            )
+    finally:
+        db_conn.execute("RESET SESSION AUTHORIZATION")
+
+
+def test_quotes_is_append_only_delete_rejected(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    quote_id = _seed_quote(db_conn)
+
+    db_conn.execute("SET SESSION AUTHORIZATION service_role")
+    try:
+        with pytest.raises(psycopg.errors.InsufficientPrivilege):
+            db_conn.execute("DELETE FROM quotes WHERE id = %s", (quote_id,))
+    finally:
+        db_conn.execute("RESET SESSION AUTHORIZATION")

@@ -35,6 +35,9 @@ $$;
 """
 
 _TABLES_TO_TRUNCATE = (
+    "quotes",
+    "price_overrides",
+    "price_rules",
     "holds",
     "room_night_inventory",
     "allotments",

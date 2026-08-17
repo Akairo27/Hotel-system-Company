@@ -33,6 +33,36 @@ def seed_hotel_and_room_type(conn: psycopg.Connection[Any]) -> tuple[int, int]:
     return hotel_id, room_type_id
 
 
+def seed_season(
+    conn: psycopg.Connection[Any],
+    *,
+    season_name: str,
+    calendar_type: str,
+    start_month: int,
+    start_day: int,
+    end_month: int,
+    end_day: int,
+    priority: int = 0,
+    is_default: bool = False,
+) -> int:
+    return returning_id(
+        conn,
+        "INSERT INTO seasons (season_name, calendar_type, start_month, start_day, "
+        "end_month, end_day, priority, is_default) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+        (
+            season_name,
+            calendar_type,
+            start_month,
+            start_day,
+            end_month,
+            end_day,
+            priority,
+            is_default,
+        ),
+    )
+
+
 def seed_allotment_nights(
     conn: psycopg.Connection[Any],
     hotel_id: int,
