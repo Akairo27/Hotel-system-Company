@@ -114,43 +114,46 @@ def test_resolve_season_id_raises_when_no_season_configured(
         resolve_season_id(db_conn, date(2026, 1, 15))
 
 
-def test_resolve_season_id_ramadan_in_a_30_day_hijri_year(
+def test_resolve_season_id_variable_hijri_month_in_a_30_day_year(
     db_conn: psycopg.Connection[Any],
 ) -> None:
+    """A synthetic season spanning one Hijri month (month 3, chosen
+    arbitrarily) — Hijri months are 29 or 30 days depending on the year,
+    and resolve_season_id must track the real boundary either way."""
     _seed_default(db_conn)
-    ramadan = seed_season(
+    variable_month = seed_season(
         db_conn,
-        season_name="Ramadan",
+        season_name="Variable Month",
         calendar_type="hijri",
-        start_month=9,
+        start_month=3,
         start_day=1,
-        end_month=10,
+        end_month=4,
         end_day=1,
         priority=1,
     )
 
-    # 1441 AH: Ramadan is 30 days, 2020-04-24 -> 2020-05-24 (verified).
-    assert resolve_season_id(db_conn, date(2020, 4, 24)) == ramadan
-    assert resolve_season_id(db_conn, date(2020, 5, 23)) == ramadan
-    assert resolve_season_id(db_conn, date(2020, 5, 24)) != ramadan  # end exclusive
+    # 1441 AH: month 3 is 30 days, 2019-10-29 -> 2019-11-28 (verified).
+    assert resolve_season_id(db_conn, date(2019, 10, 29)) == variable_month
+    assert resolve_season_id(db_conn, date(2019, 11, 27)) == variable_month
+    assert resolve_season_id(db_conn, date(2019, 11, 28)) != variable_month  # exclusive
 
 
-def test_resolve_season_id_ramadan_in_a_29_day_hijri_year(
+def test_resolve_season_id_variable_hijri_month_in_a_29_day_year(
     db_conn: psycopg.Connection[Any],
 ) -> None:
     _seed_default(db_conn)
-    ramadan = seed_season(
+    variable_month = seed_season(
         db_conn,
-        season_name="Ramadan",
+        season_name="Variable Month",
         calendar_type="hijri",
-        start_month=9,
+        start_month=3,
         start_day=1,
-        end_month=10,
+        end_month=4,
         end_day=1,
         priority=1,
     )
 
-    # 1444 AH: Ramadan is 29 days, 2023-03-23 -> 2023-04-21 (verified).
-    assert resolve_season_id(db_conn, date(2023, 3, 23)) == ramadan
-    assert resolve_season_id(db_conn, date(2023, 4, 20)) == ramadan
-    assert resolve_season_id(db_conn, date(2023, 4, 21)) != ramadan  # end exclusive
+    # 1440 AH: month 3 is 29 days, 2018-11-09 -> 2018-12-08 (verified).
+    assert resolve_season_id(db_conn, date(2018, 11, 9)) == variable_month
+    assert resolve_season_id(db_conn, date(2018, 12, 7)) == variable_month
+    assert resolve_season_id(db_conn, date(2018, 12, 8)) != variable_month  # exclusive
