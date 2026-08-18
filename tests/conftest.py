@@ -8,7 +8,7 @@ fixtures is skipped explicitly rather than faked with a mock connection.
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +32,33 @@ BEGIN
     END IF;
 END
 $$;
+"""
+
+# A minimal stand-in for the pieces of real Supabase's `auth` schema this
+# schema's migrations reference (app_users.id's FK target, and auth.uid()
+# in RLS policies) — Supabase provides both for real; plain Postgres does
+# not. Lives outside "public" so DROP SCHEMA public CASCADE in _schema
+# below never touches it, same reasoning as _ROLES_SQL being cluster-wide.
+# auth.uid() mirrors Supabase's real implementation: it reads the
+# session-local "request.jwt.claim.sub" GUC that PostgREST sets per
+# request from the verified JWT — tests set it directly to simulate being
+# signed in as a given user.
+_AUTH_SCHEMA_SQL = """
+CREATE SCHEMA IF NOT EXISTS auth;
+
+CREATE TABLE IF NOT EXISTS auth.users (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid()
+);
+
+CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
+LANGUAGE sql STABLE
+AS $$
+    SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid
+$$;
+
+GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
+GRANT SELECT ON auth.users TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
 """
 
 _TABLES_TO_TRUNCATE = (
@@ -65,6 +92,7 @@ def _schema(test_database_url: str) -> None:
     """
     with psycopg.connect(test_database_url, autocommit=True) as conn:
         conn.execute(_ROLES_SQL)
+        conn.execute(_AUTH_SCHEMA_SQL)
         conn.execute("DROP SCHEMA public CASCADE")
         conn.execute("CREATE SCHEMA public")
         for migration in sorted(MIGRATIONS_DIR.glob("*.sql")):
@@ -93,3 +121,24 @@ def db_conn(test_database_url: str, _schema: None) -> Iterator[psycopg.Connectio
         yield conn
     finally:
         conn.close()
+
+
+@pytest.fixture
+def sign_in_as(db_conn: psycopg.Connection[Any]) -> Iterator[Callable[[str], None]]:
+    """Returns a function that switches db_conn to the `authenticated` role
+    with auth.uid() resolving to the given user id — simulating an RLS
+    policy evaluating that specific user's own request, the same way
+    PostgREST does it against real Supabase.
+    """
+
+    def _sign_in(user_id: str) -> None:
+        db_conn.execute("SET SESSION AUTHORIZATION authenticated")
+        db_conn.execute(
+            sql.SQL("SET request.jwt.claim.sub = {}").format(sql.Literal(user_id))
+        )
+
+    try:
+        yield _sign_in
+    finally:
+        db_conn.execute("RESET SESSION AUTHORIZATION")
+        db_conn.execute("RESET request.jwt.claim.sub")
