@@ -62,6 +62,8 @@ GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
 """
 
 _TABLES_TO_TRUNCATE = (
+    "audit_log",
+    "app_users",
     "quotes",
     "price_overrides",
     "price_rules",

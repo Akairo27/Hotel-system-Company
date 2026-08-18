@@ -32,7 +32,7 @@ def _seed_user(
     assert row is not None
     user_id = str(row[0])
     conn.execute(
-        "INSERT INTO app_users (id, full_name, role, can_view_cost, is_active) "
+        "INSERT INTO app_users (id, full_name, app_role, can_view_cost, is_active) "
         "VALUES (%s, 'Test User', %s, %s, %s)",
         (user_id, role, can_view_cost, is_active),
     )
@@ -82,7 +82,9 @@ def test_authenticated_has_no_write_grant(
     sign_in_as(user_id)
 
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
-        db_conn.execute("UPDATE app_users SET role = 'admin' WHERE id = %s", (user_id,))
+        db_conn.execute(
+            "UPDATE app_users SET app_role = 'admin' WHERE id = %s", (user_id,)
+        )
 
 
 def test_current_app_role_reads_the_signed_in_users_role(
@@ -128,12 +130,17 @@ def test_current_user_can_view_cost_reflects_the_column(
 
 
 def test_rls_denies_anon(db_conn: psycopg.Connection[Any]) -> None:
+    """anon gets no grant on app_users at all (0010 only grants authenticated),
+    same as every other table in this schema — so this fails before RLS is
+    even reached: without schema USAGE, Postgres can't resolve the
+    unqualified table name for that role and raises UndefinedTable, not a
+    table-level permission error."""
     _seed_user(db_conn)
 
     db_conn.execute("SET SESSION AUTHORIZATION anon")
     try:
-        rows = db_conn.execute("SELECT * FROM app_users").fetchall()
-        assert rows == []
+        with pytest.raises(psycopg.errors.UndefinedTable):
+            db_conn.execute("SELECT * FROM app_users").fetchall()
     finally:
         db_conn.execute("RESET SESSION AUTHORIZATION")
 
@@ -146,7 +153,7 @@ def test_app_users_role_rejects_unknown_value(db_conn: psycopg.Connection[Any]) 
 
     with pytest.raises(psycopg.errors.CheckViolation, match="app_users_role_valid"):
         db_conn.execute(
-            "INSERT INTO app_users (id, full_name, role) VALUES (%s, 'X', 'owner')",
+            "INSERT INTO app_users (id, full_name, app_role) VALUES (%s, 'X', 'owner')",
             (row[0],),
         )
 

@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# auto-written by `next dev`/`next build` (see AGENTS.md's own header) --
+# not something this repo authors; the root CLAUDE.md is the one that
+# actually governs this codebase.
+AGENTS.md
+CLAUDE.md

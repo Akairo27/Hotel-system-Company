@@ -18,7 +18,7 @@ export async function getCurrentAppUser(): Promise<AppUser | null> {
 
   const { data } = await supabase
     .from("app_users")
-    .select("id, full_name, role, can_view_cost, is_active, created_at")
+    .select("id, full_name, app_role, can_view_cost, is_active, created_at")
     .eq("id", user.id)
     .maybeSingle<AppUser>();
 

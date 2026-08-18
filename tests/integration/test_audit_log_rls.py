@@ -23,7 +23,7 @@ def _seed_user(conn: psycopg.Connection[Any], *, role: str = "sales") -> str:
     assert row is not None
     user_id = str(row[0])
     conn.execute(
-        "INSERT INTO app_users (id, full_name, role) VALUES (%s, 'Test User', %s)",
+        "INSERT INTO app_users (id, full_name, app_role) VALUES (%s, 'Test User', %s)",
         (user_id, role),
     )
     return user_id
@@ -65,13 +65,16 @@ def test_sales_user_cannot_select_audit_log(
 
 
 def test_anon_cannot_select_audit_log(db_conn: psycopg.Connection[Any]) -> None:
+    """anon gets no grant on audit_log at all, same as app_users — see
+    test_rls_denies_anon in test_app_users_and_roles_rls.py for why this
+    is UndefinedTable rather than a table-level permission error."""
     admin_id = _seed_user(db_conn, role="admin")
     _seed_audit_entry(db_conn, admin_id)
 
     db_conn.execute("SET SESSION AUTHORIZATION anon")
     try:
-        rows = db_conn.execute("SELECT * FROM audit_log").fetchall()
-        assert rows == []
+        with pytest.raises(psycopg.errors.UndefinedTable):
+            db_conn.execute("SELECT * FROM audit_log").fetchall()
     finally:
         db_conn.execute("RESET SESSION AUTHORIZATION")
 

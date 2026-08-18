@@ -1,7 +1,3 @@
--- DRAFT — see 0010_app_users_and_roles.sql's header for why this lives
--- here instead of db/migrations/, and docs/phase-3-pr-a/README.md for the
--- promotion checklist.
---
 -- Structure only, per the phase-3 PR-A scope — no trigger or application
 -- code writes to this table yet. That arrives with PR D (cost/margin/floor
 -- management), the first screen that changes a financial value an admin
@@ -40,5 +36,5 @@ GRANT SELECT, INSERT ON TABLE audit_log TO service_role;
 GRANT SELECT ON TABLE audit_log TO authenticated;
 
 CREATE POLICY audit_log_select_admin_only ON audit_log
-    FOR SELECT TO authenticated
-    USING (current_app_role() = 'admin');
+FOR SELECT TO authenticated
+USING (current_app_role() = 'admin');

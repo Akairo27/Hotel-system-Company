@@ -15,7 +15,7 @@ export default async function DashboardPage() {
   return (
     <main>
       <h1>مرحباً، {appUser.full_name}</h1>
-      <p>الدور: {appUser.role}</p>
+      <p>الدور: {appUser.app_role}</p>
       <p>عرض التكلفة: {appUser.can_view_cost ? "مفعّل" : "غير مفعّل"}</p>
     </main>
   );

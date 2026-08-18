@@ -8,7 +8,7 @@ export type AppRole = "admin" | "sales";
 export interface AppUser {
   id: string;
   full_name: string;
-  role: AppRole;
+  app_role: AppRole;
   can_view_cost: boolean;
   is_active: boolean;
   created_at: string;

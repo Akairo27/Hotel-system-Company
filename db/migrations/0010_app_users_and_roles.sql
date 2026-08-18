@@ -1,10 +1,3 @@
--- DRAFT — not yet applied. This file lives outside db/migrations/ because
--- writing there requires approval this session's permission mode could not
--- request (Bash(git push*), Write(db/migrations/**), and Bash(npm install*)
--- are all "ask"-tier in .claude/settings.json, and no prompt could be shown).
--- See docs/phase-3-pr-a/README.md for what to check before promoting this
--- to db/migrations/0010_app_users_and_roles.sql verbatim (or edited).
---
 -- Identity lives in Supabase Auth (auth.users); this table only adds the
 -- roles and permissions RLS policies key off of. Per the phase-3 decision:
 -- claims embedded in a JWT go stale until the user logs out and back in,
@@ -22,11 +15,22 @@
 -- 0002) is the one place in this schema a "there can be only one" rule is
 -- actually enforced at the DB level.
 
+-- Migration 0001 granted schema USAGE to service_role only — nothing
+-- before this migration ever gave authenticated a real table or function
+-- grant, so there was nothing for it to resolve. This is the first one
+-- that does (the SELECT grant below, plus current_app_role()'s and
+-- current_user_can_view_cost()'s EXECUTE grants): without schema USAGE,
+-- Postgres can't resolve any unqualified "app_users" or "current_app_role()"
+-- reference for that role at all, SECURITY DEFINER or not — it fails with
+-- "does not exist", not a permission error, before the grant below is ever
+-- consulted.
+GRANT USAGE ON SCHEMA public TO authenticated;
+
 CREATE TABLE app_users (
     id uuid PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
     full_name text NOT NULL,
-    role text NOT NULL
-    CONSTRAINT app_users_role_valid CHECK (role IN ('admin', 'sales')),
+    app_role text NOT NULL
+    CONSTRAINT app_users_role_valid CHECK (app_role IN ('admin', 'sales')),
     can_view_cost boolean NOT NULL DEFAULT false,
     is_active boolean NOT NULL DEFAULT true,
     created_at timestamptz NOT NULL DEFAULT now()
@@ -68,7 +72,7 @@ SECURITY DEFINER
 STABLE
 SET search_path = public
 AS $$
-    SELECT role FROM app_users WHERE id = auth.uid() AND is_active
+    SELECT app_role FROM app_users WHERE id = auth.uid() AND is_active
 $$;
 
 CREATE FUNCTION current_user_can_view_cost() RETURNS boolean
@@ -87,9 +91,9 @@ GRANT EXECUTE ON FUNCTION current_app_role() TO authenticated;
 GRANT EXECUTE ON FUNCTION current_user_can_view_cost() TO authenticated;
 
 CREATE POLICY app_users_select_own ON app_users
-    FOR SELECT TO authenticated
-    USING (id = auth.uid());
+FOR SELECT TO authenticated
+USING (id = auth.uid());
 
 CREATE POLICY app_users_select_all_for_admin ON app_users
-    FOR SELECT TO authenticated
-    USING (current_app_role() = 'admin');
+FOR SELECT TO authenticated
+USING (current_app_role() = 'admin');
