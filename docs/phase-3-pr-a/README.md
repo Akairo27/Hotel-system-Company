@@ -10,22 +10,45 @@ new migrations are drafted under this folder instead of applied directly.
 
 ## What's committed on the branch
 
-- `docs/phase-3-pr-a/pending-migrations/0010_app_users_and_roles.sql` — draft
-- `docs/phase-3-pr-a/pending-migrations/0011_audit_log.sql` — draft
-- `tests/conftest.py` — added a minimal `auth` schema shim (`auth.users`,
-  `auth.uid()`) so RLS policies referencing Supabase Auth can be tested
-  against the local test Postgres the same way phase 1/2 already test
-  everything else. Safe against the current schema either way — it doesn't
-  touch `public` or reference `app_users`.
-- `tests/integration/test_app_users_and_roles_rls.py`,
-  `tests/integration/test_audit_log_rls.py` — will fail until the two
-  migrations above are promoted (see checklist below); that's expected,
-  not a bug in the tests.
-- `admin/middleware.ts`, `admin/utils/supabase/{client,server,middleware}.ts`,
+- `d1abcc7` — `docs/phase-3-pr-a/pending-migrations/0010_app_users_and_roles.sql`
+  and `0011_audit_log.sql` (drafts) plus this README.
+- `6691c8a` — `admin/middleware.ts`,
+  `admin/utils/supabase/{client,server,middleware}.ts`,
   `admin/lib/{types,session}.ts`, `admin/app/login/{page.tsx,actions.ts}`,
   `admin/app/dashboard/page.tsx` — the Next.js side of the auth foundation.
   No `package.json`, `tsconfig.json`, `next.config`, or Tailwind config
   were written — see "Why no Next.js scaffold" below.
+
+## What's staged but NOT committed — a pre-existing repo bug blocked it
+
+`tests/conftest.py` (the `auth` schema shim) and the two new test files,
+`tests/integration/test_app_users_and_roles_rls.py` and
+`test_audit_log_rls.py`, are written and `git add`-ed but could not be
+committed: the `mypy` pre-commit hook fails on **unrelated, pre-existing**
+`lib/hijri.py`, and I'm not permitted to touch the file that causes it.
+
+**Root cause:** `.pre-commit-config.yaml`'s `mypy` hook runs mypy in its
+own isolated environment, whose `additional_dependencies` lists
+`pytest==9.1.1` and `psycopg==3.3.4` but not `hijridate==2.6.0`. Without
+it, mypy can't see `hijridate`'s types (confirmed it ships a `py.typed`
+marker at `.venv/Lib/site-packages/hijridate/py.typed`, so this isn't a
+"the library has no types" issue) and infers `Any` for
+`_Hijri(...).month_length()`'s return, which strict mode then flags as
+"Returning Any from function declared to return int" at `lib/hijri.py:53`.
+This has nothing to do with phase 3 and would block literally any commit
+that includes a Python file, from any task, until fixed.
+
+**The fix is one line**, adding `hijridate==2.6.0` to that hook's
+`additional_dependencies` in `.pre-commit-config.yaml` — but that file is
+in `.claude/settings.json`'s **deny** list, so I cannot make it. Please
+apply it yourself, then run:
+```
+git add tests/conftest.py tests/integration/test_app_users_and_roles_rls.py tests/integration/test_audit_log_rls.py
+git commit -m "test(phase-3): add auth schema shim and app_users/audit_log RLS tests"
+```
+(the files are already staged from this session, so `git status` should
+show them as "Changes to be committed" if nothing else touched the repo
+in the meantime).
 
 ## Design decisions made without being able to ask first
 
@@ -116,5 +139,7 @@ Two separate reasons, not just the permission mode:
 8. Spot-check `utils/supabase/{client,server,middleware}.ts` against
    current Supabase docs — I wrote the `getAll`/`setAll` cookie-adapter
    pattern from training knowledge, not a live doc fetch.
-9. `git add`, `git commit`, `git push -u origin feat/phase-3-pr-a-auth-foundation`,
-   `gh pr create` — all "ask"-tier this session, so none of them ran.
+9. Commit the staged test changes (see "What's staged but NOT
+   committed" above — needs the `.pre-commit-config.yaml` fix first),
+   then `git push -u origin feat/phase-3-pr-a-auth-foundation` and
+   `gh pr create` — both "ask"-tier this session, so neither ran.
