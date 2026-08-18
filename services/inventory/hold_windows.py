@@ -18,7 +18,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 
-_LAST_MINUTE_THRESHOLD = timedelta(hours=48)
+# Public: services/pricing/compute.py reuses this exact threshold for
+# negotiation_open, per the phase-2 design decision to share one lead-time
+# boundary rather than define a second, redundant one.
+LAST_MINUTE_THRESHOLD = timedelta(hours=48)
 _LONG_LEAD_THRESHOLD = timedelta(days=15)
 
 _LAST_MINUTE_HOLD_DURATION = timedelta(hours=2)
@@ -49,7 +52,7 @@ def hold_window_for(check_in: date, now: datetime) -> HoldWindow:
     check_in_start = datetime.combine(check_in, time.min, tzinfo=UTC)
     lead_time = check_in_start - now
 
-    if lead_time < _LAST_MINUTE_THRESHOLD:
+    if lead_time < LAST_MINUTE_THRESHOLD:
         return HoldWindow(
             duration=_LAST_MINUTE_HOLD_DURATION, requires_full_payment=True
         )
