@@ -13,6 +13,21 @@ import pytest
 
 pytestmark = pytest.mark.usefixtures("db_conn")
 
+# A minimal, structurally valid min_profit_by_lead_time: one band covering
+# the whole domain (0 to open-ended). Used wherever a test needs *a* valid
+# value and isn't specifically exercising the band-shape constraints. Bound
+# as a query parameter (never string-interpolated into SQL) like every
+# other jsonb value in this file.
+_VALID_MIN_PROFIT = (
+    '{"bands": [{"min_lead_days": 0, "max_lead_days": null, '
+    '"min_profit_halalas": 1000}]}'
+)
+_VALID_DEMAND_CURVE = (
+    '{"occupancy_bands": [{"min": 0, "max": 1, "multiplier_bps": 10000}], '
+    '"lead_time_bands": [{"min_lead_days": 0, "max_lead_days": null, '
+    '"multiplier_bps": 10000}]}'
+)
+
 
 def _returning_id(
     conn: psycopg.Connection[Any], query: str, params: tuple[Any, ...] = ()
@@ -278,7 +293,8 @@ def test_price_rules_only_one_global_rule_allowed(
 ) -> None:
     db_conn.execute(
         "INSERT INTO price_rules (scope, target_margin_bps, min_profit_by_lead_time, "
-        "demand_curve) VALUES ('global', 3000, '{}'::jsonb, '{}'::jsonb)"
+        "demand_curve) VALUES ('global', 3000, %s::jsonb, %s::jsonb)",
+        (_VALID_MIN_PROFIT, _VALID_DEMAND_CURVE),
     )
 
     with pytest.raises(
@@ -287,7 +303,8 @@ def test_price_rules_only_one_global_rule_allowed(
         db_conn.execute(
             "INSERT INTO price_rules (scope, target_margin_bps, "
             "min_profit_by_lead_time, demand_curve) "
-            "VALUES ('global', 4000, '{}'::jsonb, '{}'::jsonb)"
+            "VALUES ('global', 4000, %s::jsonb, %s::jsonb)",
+            (_VALID_MIN_PROFIT, _VALID_DEMAND_CURVE),
         )
 
 
@@ -304,8 +321,8 @@ def test_price_rules_scope_id_must_be_null_for_global(
         db_conn.execute(
             "INSERT INTO price_rules (scope, scope_id, target_margin_bps, "
             "min_profit_by_lead_time, demand_curve) "
-            "VALUES ('global', %s, 3000, '{}'::jsonb, '{}'::jsonb)",
-            (hotel_id,),
+            "VALUES ('global', %s, 3000, %s::jsonb, %s::jsonb)",
+            (hotel_id, _VALID_MIN_PROFIT, _VALID_DEMAND_CURVE),
         )
 
 
@@ -333,6 +350,165 @@ def test_price_rules_global_rule_must_set_every_field(
         db_conn.execute(
             "INSERT INTO price_rules (scope, target_margin_bps) VALUES ('global', 3000)"
         )
+
+
+def test_price_rules_global_rule_accepts_a_complete_valid_config(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    """The positive case: a fully valid config is not rejected by the
+    band-shape constraints — they reject malformed bands, not bands."""
+    db_conn.execute(
+        "INSERT INTO price_rules (scope, target_margin_bps, min_profit_by_lead_time, "
+        "demand_curve) VALUES ('global', 3000, %s::jsonb, %s::jsonb)",
+        (_VALID_MIN_PROFIT, _VALID_DEMAND_CURVE),
+    )
+    row = db_conn.execute("SELECT count(*) FROM price_rules").fetchone()
+    assert row == (1,)
+
+
+def _insert_price_rule(
+    conn: psycopg.Connection[Any], min_profit: str, demand_curve: str
+) -> None:
+    conn.execute(
+        "INSERT INTO price_rules (scope, target_margin_bps, "
+        "min_profit_by_lead_time, demand_curve) "
+        "VALUES ('global', 3000, %s::jsonb, %s::jsonb)",
+        (min_profit, demand_curve),
+    )
+
+
+def test_price_rules_min_profit_bands_reject_a_gap(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    """A gap between bands (here: lead day 5 to 10 is covered by neither)
+    must fail at INSERT time — there is no safe default for "no profit
+    floor defined at this lead time" to fall back to at pricing time."""
+    bands = (
+        '{"bands": [{"min_lead_days": 0, "max_lead_days": 5, '
+        '"min_profit_halalas": 5000}, {"min_lead_days": 10, '
+        '"max_lead_days": null, "min_profit_halalas": 2000}]}'
+    )
+    with pytest.raises(
+        psycopg.errors.CheckViolation, match="price_rules_min_profit_bands_valid"
+    ):
+        _insert_price_rule(db_conn, bands, _VALID_DEMAND_CURVE)
+
+
+def test_price_rules_min_profit_bands_reject_an_overlap(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    bands = (
+        '{"bands": [{"min_lead_days": 0, "max_lead_days": 10, '
+        '"min_profit_halalas": 5000}, {"min_lead_days": 5, '
+        '"max_lead_days": null, "min_profit_halalas": 2000}]}'
+    )
+    with pytest.raises(
+        psycopg.errors.CheckViolation, match="price_rules_min_profit_bands_valid"
+    ):
+        _insert_price_rule(db_conn, bands, _VALID_DEMAND_CURVE)
+
+
+def test_price_rules_min_profit_bands_reject_missing_zero_start(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    bands = (
+        '{"bands": [{"min_lead_days": 1, "max_lead_days": null, '
+        '"min_profit_halalas": 5000}]}'
+    )
+    with pytest.raises(
+        psycopg.errors.CheckViolation, match="price_rules_min_profit_bands_valid"
+    ):
+        _insert_price_rule(db_conn, bands, _VALID_DEMAND_CURVE)
+
+
+def test_price_rules_min_profit_bands_reject_missing_open_end(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    bands = (
+        '{"bands": [{"min_lead_days": 0, "max_lead_days": 30, '
+        '"min_profit_halalas": 5000}]}'
+    )
+    with pytest.raises(
+        psycopg.errors.CheckViolation, match="price_rules_min_profit_bands_valid"
+    ):
+        _insert_price_rule(db_conn, bands, _VALID_DEMAND_CURVE)
+
+
+def test_price_rules_min_profit_bands_reject_negative_profit(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    bands = (
+        '{"bands": [{"min_lead_days": 0, "max_lead_days": null, '
+        '"min_profit_halalas": -1}]}'
+    )
+    with pytest.raises(
+        psycopg.errors.CheckViolation, match="price_rules_min_profit_bands_valid"
+    ):
+        _insert_price_rule(db_conn, bands, _VALID_DEMAND_CURVE)
+
+
+def test_price_rules_min_profit_bands_reject_missing_bands_key(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    """An object with no "bands" key at all (e.g. an empty '{}') must be
+    rejected, not silently treated as if no bands were defined — that
+    ambiguity is exactly what let this slip through before this fix."""
+    with pytest.raises(
+        psycopg.errors.CheckViolation, match="price_rules_min_profit_bands_valid"
+    ):
+        _insert_price_rule(db_conn, "{}", _VALID_DEMAND_CURVE)
+
+
+def test_price_rules_demand_curve_lead_time_bands_reject_a_gap(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    """Same shared validation function as min_profit's bands, applied to
+    demand_curve.lead_time_bands (value field multiplier_bps instead of
+    min_profit_halalas) — proves it's wired up for both jsonb columns."""
+    demand_curve = (
+        '{"occupancy_bands": [{"min": 0, "max": 1, "multiplier_bps": 10000}], '
+        '"lead_time_bands": [{"min_lead_days": 0, "max_lead_days": 5, '
+        '"multiplier_bps": 11000}, {"min_lead_days": 10, "max_lead_days": null, '
+        '"multiplier_bps": 10000}]}'
+    )
+    with pytest.raises(
+        psycopg.errors.CheckViolation,
+        match="price_rules_demand_curve_lead_time_bands_valid",
+    ):
+        _insert_price_rule(db_conn, _VALID_MIN_PROFIT, demand_curve)
+
+
+def test_price_rules_demand_curve_occupancy_bands_reject_a_gap(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    demand_curve = (
+        '{"occupancy_bands": [{"min": 0, "max": 0.5, "multiplier_bps": 10000}, '
+        '{"min": 0.6, "max": 1, "multiplier_bps": 12500}], '
+        '"lead_time_bands": [{"min_lead_days": 0, "max_lead_days": null, '
+        '"multiplier_bps": 10000}]}'
+    )
+    with pytest.raises(
+        psycopg.errors.CheckViolation,
+        match="price_rules_demand_curve_occupancy_bands_valid",
+    ):
+        _insert_price_rule(db_conn, _VALID_MIN_PROFIT, demand_curve)
+
+
+def test_price_rules_demand_curve_occupancy_bands_reject_unbounded_end(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    """Occupancy is closed 0..1, unlike lead time — a band left open-ended
+    (or one that doesn't reach 1.0) must be rejected."""
+    demand_curve = (
+        '{"occupancy_bands": [{"min": 0, "max": 0.9, "multiplier_bps": 10000}], '
+        '"lead_time_bands": [{"min_lead_days": 0, "max_lead_days": null, '
+        '"multiplier_bps": 10000}]}'
+    )
+    with pytest.raises(
+        psycopg.errors.CheckViolation,
+        match="price_rules_demand_curve_occupancy_bands_valid",
+    ):
+        _insert_price_rule(db_conn, _VALID_MIN_PROFIT, demand_curve)
 
 
 def test_price_overrides_min_allowed_cannot_exceed_ask(
