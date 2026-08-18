@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from typing import Any
 
 import psycopg
+from psycopg.types.json import Json
 
 
 def returning_id(
@@ -61,6 +62,94 @@ def seed_season(
             is_default,
         ),
     )
+
+
+def seed_allotment_night(
+    conn: psycopg.Connection[Any],
+    hotel_id: int,
+    room_type_id: int,
+    stay_date: date,
+    *,
+    total_rooms: int,
+    reserved: int = 0,
+    held: int = 0,
+    cost_per_night: int = 10_000,
+) -> int:
+    """Creates one allotment + room_night_inventory row for a single
+    night, with full control over reserved/held — unlike
+    seed_allotment_nights (below), which seeds several consecutive nights
+    but always starts them at reserved=held=0. Pricing tests need
+    per-night occupancy control that inventory tests never have.
+    """
+    allotment_id = returning_id(
+        conn,
+        "INSERT INTO allotments (hotel_id, room_type_id, stay_date, total_rooms, "
+        "cost_per_night) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+        (hotel_id, room_type_id, stay_date, total_rooms, cost_per_night),
+    )
+    conn.execute(
+        "INSERT INTO room_night_inventory (allotment_id, stay_date, total, reserved, "
+        "held) VALUES (%s, %s, %s, %s, %s)",
+        (allotment_id, stay_date, total_rooms, reserved, held),
+    )
+    return allotment_id
+
+
+def seed_price_rule(
+    conn: psycopg.Connection[Any],
+    *,
+    scope: str,
+    scope_id: int | None = None,
+    target_margin_bps: int | None = None,
+    min_profit_by_lead_time: dict[str, Any] | None = None,
+    demand_curve: dict[str, Any] | None = None,
+) -> int:
+    """Inserts a price_rules row. Any field left None stays NULL — i.e.
+    "this scope doesn't override this field, fall through" — per the
+    field-by-field inheritance design.
+    """
+    return returning_id(
+        conn,
+        "INSERT INTO price_rules (scope, scope_id, target_margin_bps, "
+        "min_profit_by_lead_time, demand_curve) VALUES (%s, %s, %s, %s, %s) "
+        "RETURNING id",
+        (
+            scope,
+            scope_id,
+            target_margin_bps,
+            Json(min_profit_by_lead_time)
+            if min_profit_by_lead_time is not None
+            else None,
+            Json(demand_curve) if demand_curve is not None else None,
+        ),
+    )
+
+
+def flat_min_profit(halalas: int) -> dict[str, Any]:
+    """A minimal valid min_profit_by_lead_time: one band, flat over the
+    whole lead-time domain, for tests that need *a* valid value and
+    aren't specifically exercising lead-time-band behavior."""
+    return {
+        "bands": [
+            {"min_lead_days": 0, "max_lead_days": None, "min_profit_halalas": halalas}
+        ]
+    }
+
+
+def flat_demand_curve(multiplier_bps: int = 10_000) -> dict[str, Any]:
+    """A minimal valid demand_curve: one flat band per axis (default
+    1.00x, i.e. no demand adjustment), for tests that need *a* valid
+    value and aren't specifically exercising demand-curve behavior."""
+    return {
+        "occupancy_bands": [{"min": 0, "max": 1, "multiplier_bps": multiplier_bps}],
+        "lead_time_bands": [
+            {
+                "min_lead_days": 0,
+                "max_lead_days": None,
+                "multiplier_bps": multiplier_bps,
+            }
+        ],
+    }
 
 
 def seed_allotment_nights(

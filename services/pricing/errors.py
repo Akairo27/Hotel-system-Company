@@ -21,3 +21,51 @@ class NoApplicableSeasonError(PricingError):
     that guarantee has been violated (e.g. an empty seasons table), not
     something normal resolution is expected to hit.
     """
+
+
+class IncompletePriceRuleChainError(PricingError):
+    """Raised when a field (target_margin_bps, min_profit_by_lead_time, or
+    demand_curve) resolves to NULL at every scope in the inheritance
+    chain — global -> season -> hotel -> room_type.
+
+    Unlike a season gap, there is no safe default to fall back to here:
+    a missing margin or profit floor has no sanctioned stand-in value.
+    This means no global price_rules row is configured at all — the DB
+    guarantees a *present* global row is complete
+    (price_rules_global_is_complete), but not that one exists.
+    """
+
+
+class AllotmentNotFoundError(PricingError):
+    """Raised when a stay date has no allotment (so no cost_per_night) for
+    the given hotel and room type — the night cannot be priced.
+
+    Deliberately not shared with services.inventory.errors — the two
+    services own their own exceptions even though the underlying
+    condition (missing allotment) is the same one.
+    """
+
+
+class InconsistentPriceConfigurationError(PricingError):
+    """Raised when a computed night's min_allowed exceeds its ask_price —
+    the resolved price rule's margin/demand combination doesn't clear the
+    resolved minimum profit floor.
+
+    This is a price_rules misconfiguration, not a bug in the
+    computation, and must be caught before it reaches the quotes table's
+    own quotes_min_allowed_not_above_ask CHECK — that constraint only
+    guards the summed totals, and a per-night violation can in principle
+    be masked by other nights in the same stay, so it is checked here
+    per night as well.
+    """
+
+
+class NoMatchingBandError(PricingError):
+    """Raised when an occupancy or lead-time value falls outside every
+    band in a demand_curve or min_profit_by_lead_time config.
+
+    Should not happen for a valid config — the price_rules CHECK
+    constraints guarantee full 0-to-open-ended (or 0-to-1) coverage — so
+    this signals either a negative lead time (a check_in in the past) or
+    a genuine data problem, not a normal pricing outcome.
+    """
