@@ -25,7 +25,7 @@ from psycopg.types.json import Json
 
 from services.inventory.hold_windows import LAST_MINUTE_THRESHOLD
 from services.pricing.bands import lookup_band_value
-from services.pricing.demand import compute_demand_factor_bps, compute_occupancy
+from services.pricing.demand import compute_demand_factor, compute_occupancy
 from services.pricing.errors import (
     AllotmentNotFoundError,
     InconsistentPriceConfigurationError,
@@ -38,12 +38,32 @@ _BPS_SCALE = 10_000
 
 @dataclass(frozen=True)
 class NightPrice:
-    """One night's per-room price, as recorded in quotes.nights."""
+    """One night's per-room price, as recorded in quotes.nights — with
+    enough of the computation kept that "why was this priced like this"
+    is answerable from the record months later, not from guessing.
+
+    The detail fields are None only when override_applied is True: an
+    active manual override skips margin/demand/floor entirely, so there
+    is no computation to report — see db/migrations/0009_quotes_nights_audit.sql
+    for the DB-enforced version of this same either/or shape.
+    """
 
     stay_date: date
     season_id: int
     ask: int
     min_allowed: int
+    override_applied: bool
+    cost_per_night: int | None = None
+    occupancy: float | None = None
+    target_margin_bps: int | None = None
+    target_margin_rule_id: int | None = None
+    price_after_margin: int | None = None
+    occupancy_multiplier_bps: int | None = None
+    lead_time_multiplier_bps: int | None = None
+    demand_factor_bps: int | None = None
+    demand_curve_rule_id: int | None = None
+    min_profit_halalas: int | None = None
+    min_profit_rule_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -107,18 +127,24 @@ def _price_one_night(
     if override is not None:
         ask, min_allowed = override
         return NightPrice(
-            stay_date=stay_date, season_id=season_id, ask=ask, min_allowed=min_allowed
+            stay_date=stay_date,
+            season_id=season_id,
+            ask=ask,
+            min_allowed=min_allowed,
+            override_applied=True,
         )
 
     rule = resolve_price_rule(conn, hotel_id, room_type_id, season_id)
     cost = _fetch_cost_per_night(conn, hotel_id, room_type_id, stay_date)
     occupancy = compute_occupancy(conn, hotel_id, room_type_id, stay_date)
-    demand_factor_bps = compute_demand_factor_bps(
-        rule.demand_curve, occupancy, lead_days
-    )
+    demand = compute_demand_factor(rule.demand_curve, occupancy, lead_days)
 
+    # Explicit sequential steps, each floor-rounded, matching exactly what
+    # gets recorded in quotes.nights — the logged trail and the computed
+    # price are the same arithmetic, not a separate approximation of it.
     markup_bps = _BPS_SCALE + rule.target_margin_bps
-    ask = cost * markup_bps * demand_factor_bps // (_BPS_SCALE * _BPS_SCALE)
+    price_after_margin = cost * markup_bps // _BPS_SCALE
+    ask = price_after_margin * demand.combined_bps // _BPS_SCALE
 
     min_profit_halalas = lookup_band_value(
         rule.min_profit_by_lead_time["bands"],
@@ -133,13 +159,59 @@ def _price_one_night(
         raise InconsistentPriceConfigurationError(
             f"hotel {hotel_id}/room type {room_type_id} on {stay_date}: "
             f"min_allowed ({min_allowed}) exceeds ask ({ask}) — target_margin_bps="
-            f"{rule.target_margin_bps}, demand_factor_bps={demand_factor_bps}, "
+            f"{rule.target_margin_bps}, demand_factor_bps={demand.combined_bps}, "
             f"min_profit_halalas={min_profit_halalas} do not clear cost ({cost})"
         )
 
     return NightPrice(
-        stay_date=stay_date, season_id=season_id, ask=ask, min_allowed=min_allowed
+        stay_date=stay_date,
+        season_id=season_id,
+        ask=ask,
+        min_allowed=min_allowed,
+        override_applied=False,
+        cost_per_night=cost,
+        occupancy=occupancy,
+        target_margin_bps=rule.target_margin_bps,
+        target_margin_rule_id=rule.target_margin_rule_id,
+        price_after_margin=price_after_margin,
+        occupancy_multiplier_bps=demand.occupancy_multiplier_bps,
+        lead_time_multiplier_bps=demand.lead_time_multiplier_bps,
+        demand_factor_bps=demand.combined_bps,
+        demand_curve_rule_id=rule.demand_curve_rule_id,
+        min_profit_halalas=min_profit_halalas,
+        min_profit_rule_id=rule.min_profit_rule_id,
     )
+
+
+def _night_to_json(night: NightPrice) -> dict[str, Any]:
+    """quotes.nights' per-night shape — see db/migrations/0009_quotes_nights_audit.sql
+    for the CHECK constraint that enforces this exact either/or shape at
+    save time, so it can't silently regress to a thinner record later.
+    """
+    record: dict[str, Any] = {
+        "date": night.stay_date.isoformat(),
+        "season_id": night.season_id,
+        "ask": night.ask,
+        "min_allowed": night.min_allowed,
+        "override_applied": night.override_applied,
+    }
+    if not night.override_applied:
+        record.update(
+            {
+                "cost_per_night": night.cost_per_night,
+                "occupancy": night.occupancy,
+                "target_margin_bps": night.target_margin_bps,
+                "target_margin_rule_id": night.target_margin_rule_id,
+                "price_after_margin": night.price_after_margin,
+                "occupancy_multiplier_bps": night.occupancy_multiplier_bps,
+                "lead_time_multiplier_bps": night.lead_time_multiplier_bps,
+                "demand_factor_bps": night.demand_factor_bps,
+                "demand_curve_rule_id": night.demand_curve_rule_id,
+                "min_profit_halalas": night.min_profit_halalas,
+                "min_profit_rule_id": night.min_profit_rule_id,
+            }
+        )
+    return record
 
 
 def _insert_quote(
@@ -156,15 +228,7 @@ def _insert_quote(
     customer_phone: str | None,
     conversation_id: int | None,
 ) -> int:
-    nights_json = [
-        {
-            "date": night.stay_date.isoformat(),
-            "season_id": night.season_id,
-            "ask": night.ask,
-            "min_allowed": night.min_allowed,
-        }
-        for night in nights
-    ]
+    nights_json = [_night_to_json(night) for night in nights]
     row = conn.execute(
         "INSERT INTO quotes (hotel_id, room_type_id, check_in, check_out, rooms, "
         "ask_price_total, min_allowed_total, nights, negotiation_open, customer_phone, "

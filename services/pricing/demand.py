@@ -8,6 +8,7 @@ points — never a hardcoded business formula.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
@@ -17,6 +18,17 @@ from services.pricing.bands import lookup_band_value
 from services.pricing.errors import AllotmentNotFoundError
 
 _BPS_SCALE = 10_000
+
+
+@dataclass(frozen=True)
+class DemandFactor:
+    """The two components of the demand factor kept separate, not just
+    their product — a quote needs to be able to say *why* demand pushed
+    the price up: because of occupancy, lead time, or both."""
+
+    occupancy_multiplier_bps: int
+    lead_time_multiplier_bps: int
+    combined_bps: int
 
 
 def compute_occupancy(
@@ -48,11 +60,12 @@ def compute_occupancy(
     return (reserved + held) / total
 
 
-def compute_demand_factor_bps(
+def compute_demand_factor(
     demand_curve: dict[str, Any], occupancy: float, lead_days: int
-) -> int:
+) -> DemandFactor:
     """Combines demand_curve's occupancy-based and lead-time-based
-    multipliers into one basis-point factor.
+    multipliers into one basis-point factor, keeping both inputs
+    alongside the combined result for traceability.
 
     Raises:
         NoMatchingBandError: occupancy or lead_days is out of the
@@ -72,4 +85,9 @@ def compute_demand_factor_bps(
         max_key="max_lead_days",
         value_key="multiplier_bps",
     )
-    return occupancy_bps * lead_time_bps // _BPS_SCALE
+    combined_bps = occupancy_bps * lead_time_bps // _BPS_SCALE
+    return DemandFactor(
+        occupancy_multiplier_bps=occupancy_bps,
+        lead_time_multiplier_bps=lead_time_bps,
+        combined_bps=combined_bps,
+    )

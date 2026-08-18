@@ -7,6 +7,13 @@ that particular field wins; a NULL field falls through to the next less
 specific matching row. See the phase-2 design decision recorded in
 ARCHITECTURE.md — this is deliberately field-by-field, not whole-row
 replacement.
+
+Because of that, a single resolution can legitimately draw its three
+fields from three *different* price_rules rows (e.g. margin from a
+room_type-scoped rule, the profit floor from a season-scoped rule, the
+demand curve from global). ResolvedPriceRule carries the id that
+supplied each field specifically so a quote can record which rule
+produced it — a single "the price rule" id would misrepresent this.
 """
 
 from __future__ import annotations
@@ -25,11 +32,15 @@ _SCOPE_PRECEDENCE = ("room_type", "hotel", "season", "global")
 @dataclass(frozen=True)
 class ResolvedPriceRule:
     """The fully-resolved rule for one (hotel, room_type, season) —
-    every field guaranteed non-None."""
+    every value guaranteed non-None, each paired with the price_rules.id
+    of the row that actually supplied it."""
 
     target_margin_bps: int
+    target_margin_rule_id: int
     min_profit_by_lead_time: dict[str, Any]
+    min_profit_rule_id: int
     demand_curve: dict[str, Any]
+    demand_curve_rule_id: int
 
 
 def resolve_price_rule(
@@ -47,7 +58,7 @@ def resolve_price_rule(
             price_rules row exists at all.
     """
     rows = conn.execute(
-        "SELECT scope, target_margin_bps, min_profit_by_lead_time, demand_curve "
+        "SELECT id, scope, target_margin_bps, min_profit_by_lead_time, demand_curve "
         "FROM price_rules "
         "WHERE scope = 'global' "
         "OR (scope = 'season' AND scope_id = %(season_id)s) "
@@ -56,25 +67,27 @@ def resolve_price_rule(
         {"season_id": season_id, "hotel_id": hotel_id, "room_type_id": room_type_id},
     ).fetchall()
 
-    by_scope = {row[0]: row for row in rows}
+    by_scope = {row[1]: row for row in rows}
 
-    def _resolve(column_index: int) -> Any:
+    def _resolve(column_index: int) -> tuple[Any, int | None]:
         for scope in _SCOPE_PRECEDENCE:
             row = by_scope.get(scope)
             if row is not None and row[column_index] is not None:
-                return row[column_index]
-        return None
+                return row[column_index], int(row[0])
+        return None, None
 
-    target_margin_bps = _resolve(1)
-    min_profit_by_lead_time = _resolve(2)
-    demand_curve = _resolve(3)
+    target_margin_bps, target_margin_rule_id = _resolve(2)
+    min_profit_by_lead_time, min_profit_rule_id = _resolve(3)
+    demand_curve, demand_curve_rule_id = _resolve(4)
 
-    incomplete = (
+    if (
         target_margin_bps is None
+        or target_margin_rule_id is None
         or min_profit_by_lead_time is None
+        or min_profit_rule_id is None
         or demand_curve is None
-    )
-    if incomplete:
+        or demand_curve_rule_id is None
+    ):
         raise IncompletePriceRuleChainError(
             f"no complete price rule for hotel {hotel_id}/room type {room_type_id}/"
             f"season {season_id} — target_margin_bps={target_margin_bps is not None}, "
@@ -84,6 +97,9 @@ def resolve_price_rule(
 
     return ResolvedPriceRule(
         target_margin_bps=target_margin_bps,
+        target_margin_rule_id=target_margin_rule_id,
         min_profit_by_lead_time=min_profit_by_lead_time,
+        min_profit_rule_id=min_profit_rule_id,
         demand_curve=demand_curve,
+        demand_curve_rule_id=demand_curve_rule_id,
     )
