@@ -401,6 +401,102 @@ def test_compute_quote_records_a_quote_row(db_conn: psycopg.Connection[Any]) -> 
     )
 
 
+def test_compute_quote_night_record_captures_the_full_computation(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    """The audit-trail requirement: a computed night's stored record must
+    be enough to answer "why was this priced this way" without guessing
+    — occupancy at pricing time, which price_rules row supplied each
+    field, the applied demand factor split into its two components, and
+    the price at each step."""
+    hotel_id, room_type_id = seed_hotel_and_room_type(db_conn)
+    _seed_default_season(db_conn)
+    margin_rule_id = seed_price_rule(
+        db_conn,
+        scope="global",
+        target_margin_bps=2000,
+        min_profit_by_lead_time=flat_min_profit(2000),
+        demand_curve=flat_demand_curve(15_000),
+    )
+    seed_allotment_night(
+        db_conn,
+        hotel_id,
+        room_type_id,
+        date(2026, 9, 1),
+        total_rooms=10,
+        reserved=3,
+        cost_per_night=10_000,
+    )
+
+    quote = compute_quote(
+        db_conn, hotel_id, room_type_id, date(2026, 9, 1), date(2026, 9, 2), 1, _NOW
+    )
+
+    night = db_conn.execute(
+        "SELECT nights -> 0 FROM quotes WHERE id = %s", (quote.id,)
+    ).fetchone()
+    assert night is not None
+    record = night[0]
+
+    assert record["override_applied"] is False
+    assert record["season_id"] == quote.nights[0].season_id
+    assert record["cost_per_night"] == 10_000
+    assert record["occupancy"] == 0.3  # 3 reserved / 10 total
+    assert record["target_margin_bps"] == 2000
+    assert record["target_margin_rule_id"] == margin_rule_id
+    assert record["demand_curve_rule_id"] == margin_rule_id
+    assert record["min_profit_rule_id"] == margin_rule_id
+    assert record["min_profit_halalas"] == 2000
+    # cost=10000, margin=20% -> price_after_margin=12000
+    assert record["price_after_margin"] == 12_000
+    # flat_demand_curve(15_000) sets both axes to 1.5x -> combined 2.25x
+    assert record["occupancy_multiplier_bps"] == 15_000
+    assert record["lead_time_multiplier_bps"] == 15_000
+    assert record["demand_factor_bps"] == 22_500
+    # ask = price_after_margin(12000) * demand(22500bps) // 10000 = 27000
+    assert record["ask"] == 27_000
+    assert record["min_allowed"] == 12_000
+
+
+def test_compute_quote_override_night_record_has_no_computation_detail(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    hotel_id, room_type_id = seed_hotel_and_room_type(db_conn)
+    _seed_default_season(db_conn)
+    _seed_global_rule(db_conn)
+    seed_allotment_night(
+        db_conn,
+        hotel_id,
+        room_type_id,
+        date(2026, 9, 1),
+        total_rooms=5,
+        cost_per_night=10_000,
+    )
+    db_conn.execute(
+        "INSERT INTO price_overrides (hotel_id, room_type_id, stay_date, "
+        "ask_price_override, min_allowed_override, expires_at) "
+        "VALUES (%s, %s, '2026-09-01', 99_999, 5_000, %s)",
+        (hotel_id, room_type_id, _NOW + timedelta(days=1)),
+    )
+
+    quote = compute_quote(
+        db_conn, hotel_id, room_type_id, date(2026, 9, 1), date(2026, 9, 2), 1, _NOW
+    )
+
+    night = db_conn.execute(
+        "SELECT nights -> 0 FROM quotes WHERE id = %s", (quote.id,)
+    ).fetchone()
+    assert night is not None
+    record = night[0]
+
+    assert record["override_applied"] is True
+    assert record["ask"] == 99_999
+    assert record["min_allowed"] == 5_000
+    assert "cost_per_night" not in record
+    assert "occupancy" not in record
+    assert "target_margin_rule_id" not in record
+
+
 def test_compute_quote_negotiation_open_when_far_from_check_in(
     db_conn: psycopg.Connection[Any],
 ) -> None:

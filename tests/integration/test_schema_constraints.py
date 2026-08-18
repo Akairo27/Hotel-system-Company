@@ -27,6 +27,13 @@ _VALID_DEMAND_CURVE = (
     '"lead_time_bands": [{"min_lead_days": 0, "max_lead_days": null, '
     '"multiplier_bps": 10000}]}'
 )
+# A minimal, structurally valid quotes.nights: one override-applied night
+# (the simplest valid shape — no computation-detail fields required). See
+# db/migrations/0009_quotes_nights_audit.sql.
+_VALID_QUOTE_NIGHTS = (
+    '[{"date": "2026-09-01", "season_id": 1, "ask": 20000, "min_allowed": 10000, '
+    '"override_applied": true}]'
+)
 
 
 def _returning_id(
@@ -552,9 +559,9 @@ def test_quotes_min_allowed_cannot_exceed_ask(db_conn: psycopg.Connection[Any]) 
         db_conn.execute(
             "INSERT INTO quotes (hotel_id, room_type_id, check_in, check_out, rooms, "
             "ask_price_total, min_allowed_total, nights, negotiation_open) "
-            "VALUES (%s, %s, '2026-09-01', '2026-09-02', 1, 10000, 20000, '[]'::jsonb, "
+            "VALUES (%s, %s, '2026-09-01', '2026-09-02', 1, 10000, 20000, %s::jsonb, "
             "true)",
-            (hotel_id, room_type_id),
+            (hotel_id, room_type_id, _VALID_QUOTE_NIGHTS),
         )
 
 
@@ -572,9 +579,9 @@ def _seed_quote(db_conn: psycopg.Connection[Any]) -> int:
         db_conn,
         "INSERT INTO quotes (hotel_id, room_type_id, check_in, check_out, rooms, "
         "ask_price_total, min_allowed_total, nights, negotiation_open) "
-        "VALUES (%s, %s, '2026-09-01', '2026-09-02', 1, 20000, 10000, '[]'::jsonb, "
+        "VALUES (%s, %s, '2026-09-01', '2026-09-02', 1, 20000, 10000, %s::jsonb, "
         "true) RETURNING id",
-        (hotel_id, room_type_id),
+        (hotel_id, room_type_id, _VALID_QUOTE_NIGHTS),
     )
 
 
@@ -607,3 +614,91 @@ def test_quotes_is_append_only_delete_rejected(
             db_conn.execute("DELETE FROM quotes WHERE id = %s", (quote_id,))
     finally:
         db_conn.execute("RESET SESSION AUTHORIZATION")
+
+
+def test_quotes_nights_empty_array_rejected(db_conn: psycopg.Connection[Any]) -> None:
+    hotel_id = _returning_id(
+        db_conn, "INSERT INTO hotels (hotel_name) VALUES ('Test Hotel') RETURNING id"
+    )
+    room_type_id = _returning_id(
+        db_conn,
+        "INSERT INTO room_types (hotel_id, room_type_name) VALUES (%s, 'Standard') "
+        "RETURNING id",
+        (hotel_id,),
+    )
+
+    with pytest.raises(
+        psycopg.errors.CheckViolation, match="quotes_nights_are_complete"
+    ):
+        db_conn.execute(
+            "INSERT INTO quotes (hotel_id, room_type_id, check_in, check_out, rooms, "
+            "ask_price_total, min_allowed_total, nights, negotiation_open) "
+            "VALUES (%s, %s, '2026-09-01', '2026-09-02', 1, 10000, 10000, '[]'::jsonb, "
+            "true)",
+            (hotel_id, room_type_id),
+        )
+
+
+def test_quotes_nights_computed_night_missing_a_detail_field_rejected(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    """A night with override_applied=false must carry every computation
+    field — missing even one (occupancy, here) means the record can't
+    answer "why was this priced this way", so it must not save."""
+    hotel_id = _returning_id(
+        db_conn, "INSERT INTO hotels (hotel_name) VALUES ('Test Hotel') RETURNING id"
+    )
+    room_type_id = _returning_id(
+        db_conn,
+        "INSERT INTO room_types (hotel_id, room_type_name) VALUES (%s, 'Standard') "
+        "RETURNING id",
+        (hotel_id,),
+    )
+    incomplete_night = (
+        '[{"date": "2026-09-01", "season_id": 1, "ask": 12000, "min_allowed": 12000, '
+        '"override_applied": false, "cost_per_night": 10000, '
+        '"target_margin_bps": 2000, "target_margin_rule_id": 1, '
+        '"price_after_margin": 12000, "occupancy_multiplier_bps": 10000, '
+        '"lead_time_multiplier_bps": 10000, "demand_factor_bps": 10000, '
+        '"demand_curve_rule_id": 1, "min_profit_halalas": 2000, '
+        '"min_profit_rule_id": 1}]'
+        # "occupancy" deliberately omitted
+    )
+
+    with pytest.raises(
+        psycopg.errors.CheckViolation, match="quotes_nights_are_complete"
+    ):
+        db_conn.execute(
+            "INSERT INTO quotes (hotel_id, room_type_id, check_in, check_out, rooms, "
+            "ask_price_total, min_allowed_total, nights, negotiation_open) "
+            "VALUES (%s, %s, '2026-09-01', '2026-09-02', 1, 12000, 12000, %s::jsonb, "
+            "true)",
+            (hotel_id, room_type_id, incomplete_night),
+        )
+
+
+def test_quotes_nights_override_night_needs_no_computation_detail(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    """The positive case for the override shape: override_applied=true
+    with only date/season_id/ask/min_allowed is accepted — there is
+    genuinely no computation to report for an overridden night."""
+    hotel_id = _returning_id(
+        db_conn, "INSERT INTO hotels (hotel_name) VALUES ('Test Hotel') RETURNING id"
+    )
+    room_type_id = _returning_id(
+        db_conn,
+        "INSERT INTO room_types (hotel_id, room_type_name) VALUES (%s, 'Standard') "
+        "RETURNING id",
+        (hotel_id,),
+    )
+
+    db_conn.execute(
+        "INSERT INTO quotes (hotel_id, room_type_id, check_in, check_out, rooms, "
+        "ask_price_total, min_allowed_total, nights, negotiation_open) "
+        "VALUES (%s, %s, '2026-09-01', '2026-09-02', 1, 20000, 10000, "
+        "%s::jsonb, true)",
+        (hotel_id, room_type_id, _VALID_QUOTE_NIGHTS),
+    )
+    row = db_conn.execute("SELECT count(*) FROM quotes").fetchone()
+    assert row == (1,)
