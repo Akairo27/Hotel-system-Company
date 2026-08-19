@@ -60,6 +60,22 @@ indentation in both migrations — first time that construct appears in
 `db/migrations/`, so there was no established formatting precedent to
 have matched up front.
 
+## Cost-column masking: decided, not yet implemented
+
+`app_users.can_view_cost` and `current_user_can_view_cost()` exist but
+nothing uses them yet — `allotments`/`quotes`/`room_night_inventory` are
+still fully locked out for `authenticated` (table-level, from phase 1/2).
+`tests/integration/test_cost_tables_rls.py` is a deliberate trip-wire:
+it asserts that lockout today so that whichever PR grants `authenticated`
+`SELECT` on any of these fails this test loudly unless it also ships the
+masking view. The masking mechanism itself — one `VIEW` per cost-bearing
+table with a `CASE WHEN current_user_can_view_cost() THEN cost ELSE NULL
+END` column, not a column-level `GRANT` or a separate view per role — is
+decided and documented in `ARCHITECTURE.md` §8, "إخفاء عمود التكلفة".
+Verified the trip-wire actually trips: temporarily added the exact grant
+this is meant to catch to a migration file, confirmed the test failed,
+reverted.
+
 ## Design decisions made without being able to ask first
 
 CLAUDE.md §10 says always ask before touching RLS or schema. I couldn't —
