@@ -279,7 +279,11 @@ def test_rls_denies_authenticated_even_when_granted_table_select(
     finally:
         db_conn.execute("RESET SESSION AUTHORIZATION")
         db_conn.execute("REVOKE SELECT ON hotels FROM authenticated")
-        db_conn.execute("REVOKE USAGE ON SCHEMA public FROM authenticated")
+        # Not revoking USAGE ON SCHEMA public here: migration 0010 grants it
+        # to authenticated permanently for the whole app, not this test —
+        # revoking it would strip every later test's ability to resolve an
+        # unqualified table name as authenticated, not just undo this test's
+        # own GRANT SELECT ON hotels above.
 
 
 def test_service_role_bypasses_rls(db_conn: psycopg.Connection[Any]) -> None:

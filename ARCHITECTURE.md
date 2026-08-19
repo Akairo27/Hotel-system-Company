@@ -97,6 +97,24 @@
 
 **الأثر:** لا يمكن أن يوجد تاريخ بلا سعر. الفجوات في تعريف العميل تُغطى تلقائياً بالافتراضي بدل أن يفشل التسعير. هذا يزيل الحاجة لحسم الفجوات قبل الإطلاق.
 
+**شاشة المواسم (phase 3 PR C، `admin/app/seasons/`):** محرر مواسم مع
+معاينة تقويمية حية — تسمح للعميل يشوف أثر كل تعديل فوراً قبل الحفظ.
+المعاينة تعيد تنفيذ منطق `season_contains`/`resolve_season_id`
+(`services/pricing/seasons.py`) بلغة TypeScript
+(`admin/lib/seasonCalendar.ts`) بدل استدعاء الخدمة حياً — لا يوجد اتصال
+بين `admin/` وأي خدمة Python. القاعدة ٦ (تحويل هجري بوحدة واحدة فقط) لا
+تُنتهك: كل حقيقة هجرية (طول الشهر، بداية الشهر ميلادياً) تأتي من جدول
+مرجعي ثابت مولَّد مسبقاً (`admin/lib/hijriCalendarReference.json`، عبر
+`tests/generate_hijri_calendar_reference.py`)، لا من حساب مباشر.
+
+**ضمان التطابق بين الطرفين، مفروض في CI:** `tests/season_conformance_fixtures.json`
+مولَّد من `season_contains`/`resolve_season_id` الحقيقيين
+(`tests/generate_season_conformance_fixtures.py`)، ومُختبَر ضد
+`seasonCalendar.ts` في `admin/lib/seasonCalendar.conformance.test.ts`
+(Vitest). أي تعديل في أحد الطرفين بدون تحديث الآخر يكسر أحد الفحصين —
+مُلزَم بهذا عشان معاينة المواسم ما تصير تكذب على العميل وهو يبني تعريفات
+مواسمه عليها.
+
 **allotments** — الحصة المخصصة
 `hotel_id` · `room_type_id` · `date` · `total_rooms` · `cost_per_night`
 

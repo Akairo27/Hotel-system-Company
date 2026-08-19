@@ -1,0 +1,675 @@
+{
+  "scenarios": [
+    {
+      "name": "gregorian_start_inclusive_end_exclusive",
+      "seasons": [
+        {
+          "id": 1,
+          "season_name": "افتراضي",
+          "calendar_type": "gregorian",
+          "start_month": 1,
+          "start_day": 1,
+          "end_month": 1,
+          "end_day": 1,
+          "priority": 0,
+          "is_default": true
+        },
+        {
+          "id": 2,
+          "season_name": "صيف",
+          "calendar_type": "gregorian",
+          "start_month": 6,
+          "start_day": 1,
+          "end_month": 9,
+          "end_day": 1,
+          "priority": 1,
+          "is_default": false
+        }
+      ],
+      "days": [
+        {
+          "date": "2026-05-31",
+          "hijriYear": 1447,
+          "matching": [],
+          "winner": null
+        },
+        {
+          "date": "2026-06-01",
+          "hijriYear": 1447,
+          "matching": [
+            "صيف"
+          ],
+          "winner": "صيف"
+        },
+        {
+          "date": "2026-08-31",
+          "hijriYear": 1448,
+          "matching": [
+            "صيف"
+          ],
+          "winner": "صيف"
+        },
+        {
+          "date": "2026-09-01",
+          "hijriYear": 1448,
+          "matching": [],
+          "winner": null
+        }
+      ]
+    },
+    {
+      "name": "gregorian_wraps_year_boundary",
+      "seasons": [
+        {
+          "id": 1,
+          "season_name": "افتراضي",
+          "calendar_type": "gregorian",
+          "start_month": 1,
+          "start_day": 1,
+          "end_month": 1,
+          "end_day": 1,
+          "priority": 0,
+          "is_default": true
+        },
+        {
+          "id": 2,
+          "season_name": "رأس السنة",
+          "calendar_type": "gregorian",
+          "start_month": 12,
+          "start_day": 20,
+          "end_month": 1,
+          "end_day": 10,
+          "priority": 1,
+          "is_default": false
+        }
+      ],
+      "days": [
+        {
+          "date": "2026-12-19",
+          "hijriYear": 1448,
+          "matching": [],
+          "winner": null
+        },
+        {
+          "date": "2026-12-20",
+          "hijriYear": 1448,
+          "matching": [
+            "رأس السنة"
+          ],
+          "winner": "رأس السنة"
+        },
+        {
+          "date": "2026-12-31",
+          "hijriYear": 1448,
+          "matching": [
+            "رأس السنة"
+          ],
+          "winner": "رأس السنة"
+        },
+        {
+          "date": "2027-01-09",
+          "hijriYear": 1448,
+          "matching": [
+            "رأس السنة"
+          ],
+          "winner": "رأس السنة"
+        },
+        {
+          "date": "2027-01-10",
+          "hijriYear": 1448,
+          "matching": [],
+          "winner": null
+        }
+      ]
+    },
+    {
+      "name": "hijri_wraps_hijri_new_year",
+      "seasons": [
+        {
+          "id": 1,
+          "season_name": "افتراضي",
+          "calendar_type": "hijri",
+          "start_month": 1,
+          "start_day": 1,
+          "end_month": 1,
+          "end_day": 1,
+          "priority": 0,
+          "is_default": true
+        },
+        {
+          "id": 2,
+          "season_name": "رأس السنة الهجرية",
+          "calendar_type": "hijri",
+          "start_month": 12,
+          "start_day": 1,
+          "end_month": 1,
+          "end_day": 1,
+          "priority": 1,
+          "is_default": false
+        }
+      ],
+      "days": [
+        {
+          "date": "2026-05-18",
+          "hijriYear": 1447,
+          "matching": [
+            "رأس السنة الهجرية"
+          ],
+          "winner": "رأس السنة الهجرية"
+        },
+        {
+          "date": "2026-06-15",
+          "hijriYear": 1447,
+          "matching": [
+            "رأس السنة الهجرية"
+          ],
+          "winner": "رأس السنة الهجرية"
+        },
+        {
+          "date": "2026-06-16",
+          "hijriYear": 1448,
+          "matching": [],
+          "winner": null
+        }
+      ]
+    },
+    {
+      "name": "gregorian_end_day_beyond_month_rolls_over",
+      "seasons": [
+        {
+          "id": 1,
+          "season_name": "افتراضي",
+          "calendar_type": "gregorian",
+          "start_month": 1,
+          "start_day": 1,
+          "end_month": 1,
+          "end_day": 1,
+          "priority": 0,
+          "is_default": true
+        },
+        {
+          "id": 2,
+          "season_name": "فبراير",
+          "calendar_type": "gregorian",
+          "start_month": 2,
+          "start_day": 1,
+          "end_month": 2,
+          "end_day": 30,
+          "priority": 1,
+          "is_default": false
+        }
+      ],
+      "days": [
+        {
+          "date": "2026-02-27",
+          "hijriYear": 1447,
+          "matching": [
+            "فبراير"
+          ],
+          "winner": "فبراير"
+        },
+        {
+          "date": "2026-02-28",
+          "hijriYear": 1447,
+          "matching": [
+            "فبراير"
+          ],
+          "winner": "فبراير"
+        },
+        {
+          "date": "2026-03-01",
+          "hijriYear": 1447,
+          "matching": [],
+          "winner": null
+        }
+      ]
+    },
+    {
+      "name": "gregorian_end_day_beyond_month_rolls_over_leap_year",
+      "seasons": [
+        {
+          "id": 1,
+          "season_name": "افتراضي",
+          "calendar_type": "gregorian",
+          "start_month": 1,
+          "start_day": 1,
+          "end_month": 1,
+          "end_day": 1,
+          "priority": 0,
+          "is_default": true
+        },
+        {
+          "id": 2,
+          "season_name": "فبراير",
+          "calendar_type": "gregorian",
+          "start_month": 2,
+          "start_day": 1,
+          "end_month": 2,
+          "end_day": 30,
+          "priority": 1,
+          "is_default": false
+        }
+      ],
+      "days": [
+        {
+          "date": "2028-02-28",
+          "hijriYear": 1449,
+          "matching": [
+            "فبراير"
+          ],
+          "winner": "فبراير"
+        },
+        {
+          "date": "2028-02-29",
+          "hijriYear": 1449,
+          "matching": [
+            "فبراير"
+          ],
+          "winner": "فبراير"
+        },
+        {
+          "date": "2028-03-01",
+          "hijriYear": 1449,
+          "matching": [],
+          "winner": null
+        }
+      ]
+    },
+    {
+      "name": "hijri_variable_month_29_day_year_explicit_next_month",
+      "seasons": [
+        {
+          "id": 1,
+          "season_name": "افتراضي",
+          "calendar_type": "hijri",
+          "start_month": 1,
+          "start_day": 1,
+          "end_month": 1,
+          "end_day": 1,
+          "priority": 0,
+          "is_default": true
+        },
+        {
+          "id": 2,
+          "season_name": "شهر متغير",
+          "calendar_type": "hijri",
+          "start_month": 3,
+          "start_day": 1,
+          "end_month": 4,
+          "end_day": 1,
+          "priority": 1,
+          "is_default": false
+        }
+      ],
+      "days": [
+        {
+          "date": "2018-11-09",
+          "hijriYear": 1440,
+          "matching": [
+            "شهر متغير"
+          ],
+          "winner": "شهر متغير"
+        },
+        {
+          "date": "2018-12-07",
+          "hijriYear": 1440,
+          "matching": [
+            "شهر متغير"
+          ],
+          "winner": "شهر متغير"
+        },
+        {
+          "date": "2018-12-08",
+          "hijriYear": 1440,
+          "matching": [],
+          "winner": null
+        }
+      ]
+    },
+    {
+      "name": "hijri_variable_month_sentinel_29_day_year",
+      "seasons": [
+        {
+          "id": 1,
+          "season_name": "افتراضي",
+          "calendar_type": "hijri",
+          "start_month": 1,
+          "start_day": 1,
+          "end_month": 1,
+          "end_day": 1,
+          "priority": 0,
+          "is_default": true
+        },
+        {
+          "id": 2,
+          "season_name": "شهر متغير بسنتينل",
+          "calendar_type": "hijri",
+          "start_month": 3,
+          "start_day": 1,
+          "end_month": 3,
+          "end_day": 30,
+          "priority": 1,
+          "is_default": false
+        }
+      ],
+      "days": [
+        {
+          "date": "2018-11-09",
+          "hijriYear": 1440,
+          "matching": [
+            "شهر متغير بسنتينل"
+          ],
+          "winner": "شهر متغير بسنتينل"
+        },
+        {
+          "date": "2018-12-07",
+          "hijriYear": 1440,
+          "matching": [
+            "شهر متغير بسنتينل"
+          ],
+          "winner": "شهر متغير بسنتينل"
+        },
+        {
+          "date": "2018-12-08",
+          "hijriYear": 1440,
+          "matching": [],
+          "winner": null
+        }
+      ]
+    },
+    {
+      "name": "hijri_variable_month_sentinel_30_day_year",
+      "seasons": [
+        {
+          "id": 1,
+          "season_name": "افتراضي",
+          "calendar_type": "hijri",
+          "start_month": 1,
+          "start_day": 1,
+          "end_month": 1,
+          "end_day": 1,
+          "priority": 0,
+          "is_default": true
+        },
+        {
+          "id": 2,
+          "season_name": "شهر متغير بسنتينل",
+          "calendar_type": "hijri",
+          "start_month": 3,
+          "start_day": 1,
+          "end_month": 3,
+          "end_day": 30,
+          "priority": 1,
+          "is_default": false
+        }
+      ],
+      "days": [
+        {
+          "date": "2019-10-29",
+          "hijriYear": 1441,
+          "matching": [
+            "شهر متغير بسنتينل"
+          ],
+          "winner": "شهر متغير بسنتينل"
+        },
+        {
+          "date": "2019-11-27",
+          "hijriYear": 1441,
+          "matching": [
+            "شهر متغير بسنتينل"
+          ],
+          "winner": "شهر متغير بسنتينل"
+        },
+        {
+          "date": "2019-11-28",
+          "hijriYear": 1441,
+          "matching": [],
+          "winner": null
+        }
+      ]
+    },
+    {
+      "name": "hijri_sentinel_wraps_into_next_hijri_year_29_day_month",
+      "seasons": [
+        {
+          "id": 1,
+          "season_name": "افتراضي",
+          "calendar_type": "hijri",
+          "start_month": 1,
+          "start_day": 1,
+          "end_month": 1,
+          "end_day": 1,
+          "priority": 0,
+          "is_default": true
+        },
+        {
+          "id": 2,
+          "season_name": "نهاية السنة بسنتينل",
+          "calendar_type": "hijri",
+          "start_month": 12,
+          "start_day": 5,
+          "end_month": 12,
+          "end_day": 30,
+          "priority": 1,
+          "is_default": false
+        }
+      ],
+      "days": [
+        {
+          "date": "2026-05-22",
+          "hijriYear": 1447,
+          "matching": [
+            "نهاية السنة بسنتينل"
+          ],
+          "winner": "نهاية السنة بسنتينل"
+        },
+        {
+          "date": "2026-06-15",
+          "hijriYear": 1447,
+          "matching": [
+            "نهاية السنة بسنتينل"
+          ],
+          "winner": "نهاية السنة بسنتينل"
+        },
+        {
+          "date": "2026-06-16",
+          "hijriYear": 1448,
+          "matching": [],
+          "winner": null
+        }
+      ]
+    },
+    {
+      "name": "hijri_sentinel_wraps_into_next_hijri_year_30_day_month",
+      "seasons": [
+        {
+          "id": 1,
+          "season_name": "افتراضي",
+          "calendar_type": "hijri",
+          "start_month": 1,
+          "start_day": 1,
+          "end_month": 1,
+          "end_day": 1,
+          "priority": 0,
+          "is_default": true
+        },
+        {
+          "id": 2,
+          "season_name": "نهاية السنة بسنتينل",
+          "calendar_type": "hijri",
+          "start_month": 12,
+          "start_day": 5,
+          "end_month": 12,
+          "end_day": 30,
+          "priority": 1,
+          "is_default": false
+        }
+      ],
+      "days": [
+        {
+          "date": "2022-07-04",
+          "hijriYear": 1443,
+          "matching": [
+            "نهاية السنة بسنتينل"
+          ],
+          "winner": "نهاية السنة بسنتينل"
+        },
+        {
+          "date": "2022-07-29",
+          "hijriYear": 1443,
+          "matching": [
+            "نهاية السنة بسنتينل"
+          ],
+          "winner": "نهاية السنة بسنتينل"
+        },
+        {
+          "date": "2022-07-30",
+          "hijriYear": 1444,
+          "matching": [],
+          "winner": null
+        }
+      ]
+    },
+    {
+      "name": "overlap_highest_priority_wins",
+      "seasons": [
+        {
+          "id": 1,
+          "season_name": "افتراضي",
+          "calendar_type": "gregorian",
+          "start_month": 1,
+          "start_day": 1,
+          "end_month": 1,
+          "end_day": 1,
+          "priority": 0,
+          "is_default": true
+        },
+        {
+          "id": 2,
+          "season_name": "منخفض",
+          "calendar_type": "gregorian",
+          "start_month": 6,
+          "start_day": 1,
+          "end_month": 9,
+          "end_day": 1,
+          "priority": 1,
+          "is_default": false
+        },
+        {
+          "id": 3,
+          "season_name": "مرتفع",
+          "calendar_type": "gregorian",
+          "start_month": 7,
+          "start_day": 1,
+          "end_month": 8,
+          "end_day": 1,
+          "priority": 2,
+          "is_default": false
+        }
+      ],
+      "days": [
+        {
+          "date": "2026-07-15",
+          "hijriYear": 1448,
+          "matching": [
+            "مرتفع",
+            "منخفض"
+          ],
+          "winner": "مرتفع"
+        },
+        {
+          "date": "2026-06-15",
+          "hijriYear": 1447,
+          "matching": [
+            "منخفض"
+          ],
+          "winner": "منخفض"
+        }
+      ]
+    },
+    {
+      "name": "overlap_tie_breaks_toward_lower_id",
+      "seasons": [
+        {
+          "id": 1,
+          "season_name": "افتراضي",
+          "calendar_type": "gregorian",
+          "start_month": 1,
+          "start_day": 1,
+          "end_month": 1,
+          "end_day": 1,
+          "priority": 0,
+          "is_default": true
+        },
+        {
+          "id": 2,
+          "season_name": "الأول",
+          "calendar_type": "gregorian",
+          "start_month": 6,
+          "start_day": 1,
+          "end_month": 9,
+          "end_day": 1,
+          "priority": 1,
+          "is_default": false
+        },
+        {
+          "id": 3,
+          "season_name": "الثاني",
+          "calendar_type": "gregorian",
+          "start_month": 6,
+          "start_day": 1,
+          "end_month": 9,
+          "end_day": 1,
+          "priority": 1,
+          "is_default": false
+        }
+      ],
+      "days": [
+        {
+          "date": "2026-07-15",
+          "hijriYear": 1448,
+          "matching": [
+            "الأول",
+            "الثاني"
+          ],
+          "winner": "الأول"
+        }
+      ]
+    },
+    {
+      "name": "falls_back_to_default_when_nothing_matches",
+      "seasons": [
+        {
+          "id": 1,
+          "season_name": "افتراضي",
+          "calendar_type": "gregorian",
+          "start_month": 1,
+          "start_day": 1,
+          "end_month": 1,
+          "end_day": 1,
+          "priority": 0,
+          "is_default": true
+        },
+        {
+          "id": 2,
+          "season_name": "صيف",
+          "calendar_type": "gregorian",
+          "start_month": 6,
+          "start_day": 1,
+          "end_month": 9,
+          "end_day": 1,
+          "priority": 1,
+          "is_default": false
+        }
+      ],
+      "days": [
+        {
+          "date": "2026-01-15",
+          "hijriYear": 1447,
+          "matching": [],
+          "winner": null
+        }
+      ]
+    }
+  ]
+}
