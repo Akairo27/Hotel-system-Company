@@ -58,21 +58,54 @@
 --    IN SCHEMA public clause — a default scoped to role postgres across
 --    every schema, not schema-scoped — is what actually suppresses it;
 --    re-verified the same way (new function, proacl populated,
---    anon/authenticated both false) and it landed. postgres does not
---    currently own anything outside public (auth/storage/realtime belong
---    to Supabase's own service roles), so in practice this is equivalent
---    to a public-only default today, and stays conservative — deny by
---    default — if that ever changes. TABLES/SEQUENCES above do not need
---    this: their built-in Postgres default is already "PUBLIC gets
---    nothing", so a schema-scoped REVOKE-from-nothing is a harmless
---    no-op there, unlike the unsafe PUBLIC-gets-EXECUTE default for
---    functions.
+--    anon/authenticated both false) and it landed. TABLES/SEQUENCES
+--    above do not need this: their built-in Postgres default is already
+--    "PUBLIC gets nothing", so a schema-scoped REVOKE-from-nothing is a
+--    harmless no-op there, unlike the unsafe PUBLIC-gets-EXECUTE default
+--    for functions.
+--
+-- IMPORTANT — this default is genuinely global (FOR ROLE postgres, no
+-- IN SCHEMA), covering every schema postgres creates a function in, not
+-- just public. Verified precisely what that does and does not reach,
+-- rather than assuming "global" means "everywhere": a schema-specific
+-- default-ACL row, where one already exists, wins over the global one —
+-- confirmed by reproducing it locally (a schema with its own permissive
+-- default plus a global restrictive one still let the permissive
+-- schema-specific default through on a new function). Checked which
+-- schemas already carry a postgres-scoped row today: public's own
+-- (now-restricted-by-this-migration) row, and one more — storage already
+-- had a pre-existing (postgres, storage, functions) row from Supabase's
+-- own provisioning, still permissive (anon/authenticated/service_role
+-- all EXECUTE), untouched by this migration, that would win over the
+-- global REVOKE below if postgres ever created a function there. auth
+-- and realtime have no such row (their existing default-ACL entries all
+-- key to supabase_auth_admin/supabase_admin, never postgres), so the
+-- global default here would actually apply if postgres ever created a
+-- function in either. None of this is exploitable today: confirmed
+-- postgres holds no CREATE privilege on auth, storage, or realtime at
+-- all (has_schema_privilege(...) false on all three) — but exact
+-- reach matters more than a comforting overstatement, since a future
+-- Supabase upgrade could change that CREATE privilege without this
+-- migration knowing. Practical consequence: (a) if a future Supabase
+-- engine/platform upgrade ever changes what postgres owns in
+-- auth/storage/realtime and something there starts returning
+-- "permission denied for function", check this migration and specifically
+-- whether the affected schema already had its own pre-existing default
+-- (storage-shaped) or not (auth/realtime-shaped) — the fix looks
+-- different depending on which; (b) any new function this repo's own
+-- migrations ever create, in public or any other schema postgres is
+-- actually allowed to create in, is unreachable by anon/authenticated by
+-- default and needs its own explicit GRANT EXECUTE ... TO <role> — same
+-- discipline as a new table needing its own GRANT, no exceptions for
+-- "it's just a helper".
 --
 -- Closing this needs both layers revoked, for existing functions and for
 -- the default going forward: REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA
--- public FROM PUBLIC, anon, authenticated is the retroactive half; the
--- ALTER DEFAULT PRIVILEGES statement (global for role postgres, per
--- wrinkle 2 above) is the going-forward half.
+-- public FROM PUBLIC, anon, authenticated is the retroactive half (public
+-- only — the only schema this repo's migrations actually create functions
+-- in today); the ALTER DEFAULT PRIVILEGES statement (global for role
+-- postgres, per wrinkle 2 above) is the going-forward half, and it is
+-- intentionally not schema-scoped.
 
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
 REVOKE ALL ON TABLES FROM anon, authenticated;
