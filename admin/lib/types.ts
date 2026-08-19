@@ -13,3 +13,19 @@ export interface AppUser {
   is_active: boolean;
   created_at: string;
 }
+
+// Mirrors db/migrations/0001_hotels_room_types.sql. Neither table carries a
+// cost column, so unlike AppUser there is no ARCHITECTURE.md §8 masking
+// concern here.
+export interface Hotel {
+  id: number;
+  hotel_name: string;
+  created_at: string;
+}
+
+export interface RoomType {
+  id: number;
+  hotel_id: number;
+  room_type_name: string;
+  created_at: string;
+}
