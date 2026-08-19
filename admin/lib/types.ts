@@ -29,3 +29,22 @@ export interface RoomType {
   room_type_name: string;
   created_at: string;
 }
+
+// Mirrors db/migrations/0002_seasons.sql. resolve_season_id
+// (services/pricing/seasons.py) ignores a default row's own start/end
+// entirely and falls back to it whenever no non-default season matches —
+// its bounds exist only to satisfy the NOT NULL columns, never rendered.
+export type CalendarType = "hijri" | "gregorian";
+
+export interface Season {
+  id: number;
+  season_name: string;
+  calendar_type: CalendarType;
+  start_month: number;
+  start_day: number;
+  end_month: number;
+  end_day: number;
+  priority: number;
+  is_default: boolean;
+  created_at: string;
+}

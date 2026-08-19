@@ -70,6 +70,22 @@ jobs:
       - name: pytest
         run: uv run pytest --cov --cov-report=term-missing
 
+      # Both of these are generated-and-committed artifacts (see each
+      # script's module docstring) — regenerating here and diffing catches
+      # the case where lib/hijri.py or services/pricing/seasons.py changed
+      # but the committed output wasn't refreshed to match, which would
+      # otherwise let admin/'s calendar preview silently drift from the
+      # real pricing engine.
+      - name: Hijri calendar reference table is up to date
+        run: |
+          uv run python -m tests.generate_hijri_calendar_reference
+          git diff --exit-code admin/lib/hijriCalendarReference.json
+
+      - name: Season conformance fixtures are up to date
+        run: |
+          uv run python -m tests.generate_season_conformance_fixtures
+          git diff --exit-code tests/season_conformance_fixtures.json
+
       # Two thresholds, enforced separately. coverage.py has no per-path
       # option, so the same data file is reported twice.
       - name: coverage - pricing and inventory at 100%
@@ -114,6 +130,14 @@ jobs:
 
       - name: tsc --noEmit
         run: npx tsc --noEmit
+
+      # Verifies seasonCalendar.ts against tests/season_conformance_fixtures.json
+      # (committed, generated from the real services/pricing/seasons.py —
+      # see the python job's "Season conformance fixtures are up to date"
+      # step for the other half of this guarantee). A change to either
+      # side without the other fails one of these two jobs.
+      - name: vitest - seasonCalendar conformance
+        run: npx vitest run
 
   secrets:
     name: secret scan

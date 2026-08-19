@@ -15,6 +15,8 @@ export default async function DashboardPage() {
       <p>عرض التكلفة: {appUser.can_view_cost ? "مفعّل" : "غير مفعّل"}</p>
       <nav>
         <Link href="/hotels">الفنادق وأنواع الغرف</Link>
+        <br />
+        <Link href="/seasons">المواسم</Link>
       </nav>
     </main>
   );
