@@ -416,32 +416,33 @@ CASE WHEN current_user_can_view_cost() THEN cost_per_night ELSE NULL END
    العمود المعرِّف معزول وواضح (نفس نقطة "ثغرة `holds`" أعلاه) — لا لو
    الهاتف/الاسم مبعثر داخل حقول `jsonb` أو نصوص حرة بلا بنية.
 
-   **المسار الصلاحياتي:** `quotes` لا يملك أي `GRANT UPDATE` لأي دور —
-   `service_role` نفسه عنده `SELECT, INSERT` فقط صراحةً (migration 0008).
-   يعني تصفير `customer_phone` **لازم يمر عبر `service_role`** بصلاحية
-   `UPDATE` مضافة صراحةً وقت بناء هذا المسار — والأصح تقنياً حصرها
-   بعمود واحد (`GRANT UPDATE (customer_phone) ON quotes TO service_role`)
-   بدل `UPDATE` عام على الجدول، حتى لا تنفتح بقية الأعمدة (السعر، القاعدة
-   المطبَّقة) للتعديل بالخطأ — الهدف إبقاء كل شيء append-only إلا هذا
-   العمود بالذات.
+   **المسار الفعلي — `quotes_erase_customer_phone(target_phone text)`
+   (migration 0013):** دالة `SECURITY DEFINER` واحدة، لا تسوي إلا شيئاً
+   واحداً — `UPDATE quotes SET customer_phone = NULL WHERE customer_phone
+   = target_phone` — لا تقدر تلمس أي عمود ثاني (السعر، القاعدة المطبَّقة،
+   `nights`) ولا تحذف صفاً. `GRANT EXECUTE` عليها لـ`service_role` وحده؛
+   `anon`/`authenticated` مرفوضان افتراضياً أصلاً (قفل migration 0012
+   العام على الدوال). النتيجة: قاعدة "لا تعديل" تبقى مفروضة على مستوى
+   القاعدة نفسها لكل شيء عدا هذا الثقب الضيق المصمَّم لغرض واحد، بدل
+   فتح `UPDATE` عام على `service_role` كان بيعرّض بقية الأعمدة للتعديل
+   بالخطأ. مُختبَر: `tests/integration/test_customer_erasure.py`.
 
-   **⚠️ ثغرة حقيقية لُقيت أثناء التحقق من هذا القسم، لا افتراض:**
-   تأكدنا فعلياً (`has_table_privilege` على مشروع Supabase حقيقي) إن
-   `service_role` **يملك `UPDATE` و`DELETE` كاملين على `quotes`
-   و`audit_log` اليوم** — رغم إن ميقريشن 0008 و0011 يمنحان صراحةً
-   `SELECT, INSERT` فقط. السبب نفس آلية هذه الجلسة كاملة: default ACL
-   من Supabase يمنح `service_role` كل الصلاحيات على أي جدول جديد
-   تلقائياً (نفس ما وثّقناه في "الصلاحيات الافتراضية على مخطط public"
-   أعلاه)، وميقريشن 0008/0011 ما ألغتها صراحةً لـ`service_role` — فقط
-   ألغتها لاحقاً (migration 0012) لـ`anon`/`authenticated`، لا
-   لـ`service_role`. يعني ضمانة "append-only" لـ`quotes` و`audit_log`
-   **غير مفعّلة فعلياً على مستوى قاعدة البيانات اليوم** — أي كود يتصل
-   بـ`service_role` (والذي يشمل خدمات الباكند كلها، لا فقط مسار محو
-   مستقبلي) يقدر يعدّل أو يحذف صفاً من `quotes`/`audit_log` هذه اللحظة،
-   بلا أي قيد يمنعه. هذا لم يُصلَح في هذه الجلسة — يحتاج ميقريشن جديدة
-   (لا تعديل 0008/0011 نفسها، فهي مدموجة أصلاً) تُلغي صراحةً `UPDATE`/
-   `DELETE`/`TRUNCATE`/`REFERENCES`/`TRIGGER` من `service_role` على
-   الجدولين، تاركة `SELECT, INSERT` فقط — بانتظار قرار العميل بالأولوية.
+   **⚠️ ثغرة حقيقية لُقيت أثناء التحقق من هذا القسم، لا افتراض — أُصلحت
+   بـmigration 0013:** تأكدنا فعلياً (`has_table_privilege` على مشروع
+   Supabase حقيقي) إن `service_role` **كان يملك `UPDATE` و`DELETE`
+   كاملين على `quotes` و`audit_log`** رغم إن ميقريشن 0008 و0011 تمنحان
+   صراحةً `SELECT, INSERT` فقط — نفس آلية default ACL موثّقة أعلاه
+   بالكامل، بس ما أُغلقت يوماً لـ`service_role` (migration 0012 أغلقتها
+   لـ`anon`/`authenticated` فقط). يعني ضمانة "append-only" لـ`quotes`
+   و`audit_log` **كانت غير مفعّلة فعلياً على مستوى القاعدة** — أي كود
+   متصل بـ`service_role` يقدر يعدّل أو يحذف سجل تسعير مُدقَّق، بلا أي
+   قيد. migration 0013 تُلغي صراحةً `UPDATE`/`DELETE`/`TRUNCATE`/
+   `REFERENCES`/`TRIGGER` من `service_role` على الجدولين (يبقى `SELECT,
+   INSERT` فقط، مطابق للتوثيق الأصلي)، ثم تفتح الثقب الضيق أعلاه فقط.
+   تحقّقنا حياً على المشروع الحقيقي: إدراج صف اختباري، تصفيره بالدالة
+   (رقم التسعير بقي كما هو، الهاتف صار `NULL`)، ثم محاولة `UPDATE`
+   مباشرة على نفس الصف كـ`service_role` — رُفضت فعلاً
+   (`permission denied for table quotes`).
 2. **حق الوصول — تصدير كل بيانات عميل معيّن.**
    يحتاج معرِّفاً واحداً يمكن البحث به عبر كل جدول يحمل بيانات ذلك
    العميل — اليوم هذا `customer_phone`. أي جدول مستقبلي (`bookings`،
