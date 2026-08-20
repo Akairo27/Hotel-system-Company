@@ -24,29 +24,29 @@ BEGIN
     IF actor IS NULL THEN
         RAISE EXCEPTION 'app.actor_id must be set before updating app_users role/can_view_cost';
     END IF;
-    IF NEW.can_view_cost IS DISTINCT FROM OLD.can_view_cost THEN
+    IF new.can_view_cost IS DISTINCT FROM old.can_view_cost THEN
         INSERT INTO audit_log (table_name, row_id, column_name, old_value, new_value, changed_by)
         VALUES (
             'app_users',
-            NEW.id::text,
+            new.id::text,
             'can_view_cost',
-            to_jsonb(OLD.can_view_cost),
-            to_jsonb(NEW.can_view_cost),
+            to_jsonb(old.can_view_cost),
+            to_jsonb(new.can_view_cost),
             actor
         );
     END IF;
-    IF NEW.app_role IS DISTINCT FROM OLD.app_role THEN
+    IF new.app_role IS DISTINCT FROM old.app_role THEN
         INSERT INTO audit_log (table_name, row_id, column_name, old_value, new_value, changed_by)
         VALUES (
             'app_users',
-            NEW.id::text,
+            new.id::text,
             'app_role',
-            to_jsonb(OLD.app_role),
-            to_jsonb(NEW.app_role),
+            to_jsonb(old.app_role),
+            to_jsonb(new.app_role),
             actor
         );
     END IF;
-    RETURN NEW;
+    RETURN new;
 END;
 $$;
 
@@ -54,8 +54,8 @@ CREATE TRIGGER app_users_audit_role_and_cost_visibility
 AFTER UPDATE ON app_users
 FOR EACH ROW
 WHEN (
-    OLD.can_view_cost IS DISTINCT FROM NEW.can_view_cost
-    OR OLD.app_role IS DISTINCT FROM NEW.app_role
+    old.can_view_cost IS DISTINCT FROM new.can_view_cost
+    OR old.app_role IS DISTINCT FROM new.app_role
 )
 EXECUTE FUNCTION app_users_audit_trigger();
 

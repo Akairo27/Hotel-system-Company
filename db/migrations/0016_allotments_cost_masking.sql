@@ -59,8 +59,8 @@ SELECT
     room_type_id,
     stay_date,
     total_rooms,
-    CASE WHEN current_user_can_view_cost() THEN cost_per_night ELSE NULL END AS cost_per_night,
-    created_at
+    created_at,
+    CASE WHEN current_user_can_view_cost() THEN cost_per_night END AS cost_per_night
 FROM allotments
 WHERE current_app_role() IS NOT NULL;
 
@@ -109,20 +109,20 @@ BEGIN
     INSERT INTO audit_log (table_name, row_id, column_name, old_value, new_value, changed_by)
     VALUES (
         'allotments',
-        NEW.id::text,
+        new.id::text,
         'cost_per_night',
-        to_jsonb(OLD.cost_per_night),
-        to_jsonb(NEW.cost_per_night),
+        to_jsonb(old.cost_per_night),
+        to_jsonb(new.cost_per_night),
         actor
     );
-    RETURN NEW;
+    RETURN new;
 END;
 $$;
 
 CREATE TRIGGER allotments_audit_cost_per_night
 AFTER UPDATE ON allotments
 FOR EACH ROW
-WHEN (OLD.cost_per_night IS DISTINCT FROM NEW.cost_per_night)
+WHEN (old.cost_per_night IS DISTINCT FROM new.cost_per_night)
 EXECUTE FUNCTION allotments_audit_trigger();
 
 -- The only supported write path for cost_per_night. set_config(..., true)
