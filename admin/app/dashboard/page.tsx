@@ -17,6 +17,14 @@ export default async function DashboardPage() {
         <Link href="/hotels">الفنادق وأنواع الغرف</Link>
         <br />
         <Link href="/seasons">المواسم</Link>
+        <br />
+        <Link href="/allotments">التكلفة</Link>
+        {appUser.app_role === "admin" && (
+          <>
+            <br />
+            <Link href="/users">الصلاحيات</Link>
+          </>
+        )}
       </nav>
     </main>
   );

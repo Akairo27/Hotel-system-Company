@@ -48,3 +48,18 @@ export interface Season {
   is_default: boolean;
   created_at: string;
 }
+
+// Mirrors db/migrations/0016_allotments_cost_masking.sql's
+// allotments_for_dashboard VIEW, not the allotments table itself —
+// cost_per_night is null whenever the querying user's can_view_cost is
+// false (ARCHITECTURE.md §8), so this type reflects that directly instead
+// of pretending the column is always present.
+export interface AllotmentForDashboard {
+  id: number;
+  hotel_id: number;
+  room_type_id: number;
+  stay_date: string;
+  total_rooms: number;
+  cost_per_night: number | null;
+  created_at: string;
+}
