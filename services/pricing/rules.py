@@ -8,6 +8,14 @@ specific matching row. See the phase-2 design decision recorded in
 ARCHITECTURE.md — this is deliberately field-by-field, not whole-row
 replacement.
 
+Only *active* rows participate (price_rules.is_active, migration 0020) —
+a deactivated rule is treated as if it did not exist at all, falling
+through to the next less specific scope exactly like a row that never
+set that field. price_rules has no DELETE grant for the admin dashboard
+(a row created at the wrong scope would otherwise shadow the chain
+forever with no way out), so is_active is the only mechanism for
+removing a rule from resolution.
+
 Because of that, a single resolution can legitimately draw its three
 fields from three *different* price_rules rows (e.g. margin from a
 room_type-scoped rule, the profit floor from a season-scoped rule, the
@@ -60,10 +68,11 @@ def resolve_price_rule(
     rows = conn.execute(
         "SELECT id, scope, target_margin_bps, min_profit_by_lead_time, demand_curve "
         "FROM price_rules "
-        "WHERE scope = 'global' "
+        "WHERE is_active "
+        "AND (scope = 'global' "
         "OR (scope = 'season' AND scope_id = %(season_id)s) "
         "OR (scope = 'hotel' AND scope_id = %(hotel_id)s) "
-        "OR (scope = 'room_type' AND scope_id = %(room_type_id)s)",
+        "OR (scope = 'room_type' AND scope_id = %(room_type_id)s))",
         {"season_id": season_id, "hotel_id": hotel_id, "room_type_id": room_type_id},
     ).fetchall()
 
