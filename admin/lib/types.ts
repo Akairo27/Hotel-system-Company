@@ -103,13 +103,16 @@ export type PriceRuleScope = "global" | "season" | "hotel" | "room_type";
 // price_rules_for_dashboard VIEW, not the price_rules table itself —
 // target_margin_bps and min_profit_by_lead_time are null whenever the
 // querying user's can_view_cost is false, the same masking shape as
-// AllotmentForDashboard above; demand_curve and is_active carry no cost
-// signal and are always present.
+// AllotmentForDashboard above. demand_curve carries no cost signal and is
+// never masked, but it is still a field-by-field inheritance column like
+// the two masked ones (ARCHITECTURE.md §5) — null on a non-global row
+// means "not overridden at this scope", not "no value". Only the global
+// row's price_rules_global_is_complete CHECK guarantees it non-null there.
 export interface PriceRuleForDashboard {
   id: number;
   scope: PriceRuleScope;
   scope_id: number | null;
-  demand_curve: DemandCurve;
+  demand_curve: DemandCurve | null;
   created_at: string;
   is_active: boolean;
   target_margin_bps: number | null;

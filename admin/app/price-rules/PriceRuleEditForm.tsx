@@ -76,15 +76,14 @@ export function PriceRuleEditForm({
     toGeneric((rule?.min_profit_by_lead_time ?? DEFAULT_MIN_PROFIT).bands)
   );
 
-  // demand_curve is never masked and never null on an existing row (see
-  // PriceRuleForDashboard) — it always has a real value to seed the form
-  // with, existing rule or not.
-  const [overrideDemandCurve, setOverrideDemandCurve] = useState(isGlobal || rule !== null);
+  const [overrideDemandCurve, setOverrideDemandCurve] = useState(
+    isGlobal || rule?.demand_curve !== null
+  );
   const [occupancyBands, setOccupancyBands] = useState<GenericBand[]>(
-    toGeneric((rule ?? { demand_curve: DEFAULT_DEMAND_CURVE }).demand_curve.occupancy_bands)
+    toGeneric((rule?.demand_curve ?? DEFAULT_DEMAND_CURVE).occupancy_bands)
   );
   const [demandLeadTimeBands, setDemandLeadTimeBands] = useState<GenericBand[]>(
-    toGeneric((rule ?? { demand_curve: DEFAULT_DEMAND_CURVE }).demand_curve.lead_time_bands)
+    toGeneric((rule?.demand_curve ?? DEFAULT_DEMAND_CURVE).lead_time_bands)
   );
 
   const [error, setError] = useState<string | null>(null);
