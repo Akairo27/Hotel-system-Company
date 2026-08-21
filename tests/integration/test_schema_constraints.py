@@ -11,6 +11,8 @@ from typing import Any
 import psycopg
 import pytest
 
+from tests.integration._seed import seed_actor
+
 pytestmark = pytest.mark.usefixtures("db_conn")
 
 # A minimal, structurally valid min_profit_by_lead_time: one band covering
@@ -302,6 +304,12 @@ def test_service_role_bypasses_rls(db_conn: psycopg.Connection[Any]) -> None:
 def test_price_rules_only_one_global_rule_allowed(
     db_conn: psycopg.Connection[Any],
 ) -> None:
+    # The first INSERT succeeds and fires migration 0018's AFTER INSERT
+    # audit trigger, which requires app.actor_id to be set — the second,
+    # rejected INSERT never reaches that trigger at all, since a
+    # UniqueViolation stops the row from being inserted in the first
+    # place, so it needs no actor of its own.
+    seed_actor(db_conn)
     db_conn.execute(
         "INSERT INTO price_rules (scope, target_margin_bps, min_profit_by_lead_time, "
         "demand_curve) VALUES ('global', 3000, %s::jsonb, %s::jsonb)",
@@ -368,6 +376,7 @@ def test_price_rules_global_rule_accepts_a_complete_valid_config(
 ) -> None:
     """The positive case: a fully valid config is not rejected by the
     band-shape constraints — they reject malformed bands, not bands."""
+    seed_actor(db_conn)
     db_conn.execute(
         "INSERT INTO price_rules (scope, target_margin_bps, min_profit_by_lead_time, "
         "demand_curve) VALUES ('global', 3000, %s::jsonb, %s::jsonb)",

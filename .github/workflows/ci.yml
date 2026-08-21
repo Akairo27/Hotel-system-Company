@@ -86,6 +86,17 @@ jobs:
           uv run python -m tests.generate_season_conformance_fixtures
           git diff --exit-code tests/season_conformance_fixtures.json
 
+      # Regenerates only the expectedValid half of each fixture case (the
+      # part Postgres itself computes) — expectedDefect is hand-authored
+      # and never touched by this script, so this diff catches only a
+      # drift between db/migrations/0006_price_rules.sql's validators and
+      # the committed accept/reject ground truth, not a change to anyone's
+      # manual classification.
+      - name: Price rule band conformance fixtures are up to date
+        run: |
+          uv run python -m tests.generate_price_rules_band_conformance_fixtures
+          git diff --exit-code tests/price_rules_band_conformance_fixtures.json
+
       # Two thresholds, enforced separately. coverage.py has no per-path
       # option, so the same data file is reported twice.
       - name: coverage - pricing and inventory at 100%
@@ -136,7 +147,14 @@ jobs:
       # see the python job's "Season conformance fixtures are up to date"
       # step for the other half of this guarantee). A change to either
       # side without the other fails one of these two jobs.
-      - name: vitest - seasonCalendar conformance
+      # Runs every Vitest suite in admin/ — seasonCalendar conformance
+      # (against tests/season_conformance_fixtures.json) and
+      # priceRuleBands conformance (against
+      # tests/price_rules_band_conformance_fixtures.json) alike. The
+      # python job's two "... fixtures are up to date" steps are the other
+      # half of each guarantee; a change to either side without the other
+      # fails one of these two jobs.
+      - name: vitest
         run: npx vitest run
 
   secrets:

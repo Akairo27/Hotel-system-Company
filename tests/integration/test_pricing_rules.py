@@ -204,3 +204,76 @@ def test_resolve_price_rule_raises_when_no_global_rule_exists(
 
     with pytest.raises(IncompletePriceRuleChainError):
         resolve_price_rule(db_conn, hotel_id, room_type_id, season_id)
+
+
+def test_resolve_price_rule_skips_an_inactive_rule(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    """A deactivated rule (price_rules.is_active, migration 0020) is not in
+    the chain at all: the field falls through to the next less specific
+    scope that set it, exactly as if the row did not exist. price_rules has
+    no DELETE grant for the admin dashboard, so this switch is the only way
+    out of a rule created at the wrong scope."""
+    hotel_id, room_type_id = seed_hotel_and_room_type(db_conn)
+    season_id = _seed_season(db_conn)
+    seed_price_rule(
+        db_conn,
+        scope="global",
+        target_margin_bps=1000,
+        min_profit_by_lead_time=flat_min_profit(500),
+        demand_curve=flat_demand_curve(),
+    )
+    season_rule_id = seed_price_rule(
+        db_conn, scope="season", scope_id=season_id, target_margin_bps=2000
+    )
+    seed_price_rule(
+        db_conn,
+        scope="hotel",
+        scope_id=hotel_id,
+        target_margin_bps=3000,
+        is_active=False,
+    )
+
+    rule = resolve_price_rule(db_conn, hotel_id, room_type_id, season_id)
+
+    # Asserting on the id, not just the value, is what distinguishes
+    # "skipped the disabled hotel row" from "coincidentally the same
+    # number" -- 2000 and season_rule_id must agree.
+    assert rule.target_margin_bps == 2000
+    assert rule.target_margin_rule_id == season_rule_id
+
+
+def test_resolve_price_rule_falls_through_two_inactive_scopes_to_global(
+    db_conn: psycopg.Connection[Any],
+) -> None:
+    """Pins the OR-chain end to end: disabling every non-global scope that
+    could supply a field must still resolve from the (always-active)
+    global rule, not raise."""
+    hotel_id, room_type_id = seed_hotel_and_room_type(db_conn)
+    season_id = _seed_season(db_conn)
+    global_rule_id = seed_price_rule(
+        db_conn,
+        scope="global",
+        target_margin_bps=1000,
+        min_profit_by_lead_time=flat_min_profit(500),
+        demand_curve=flat_demand_curve(),
+    )
+    seed_price_rule(
+        db_conn,
+        scope="season",
+        scope_id=season_id,
+        target_margin_bps=2000,
+        is_active=False,
+    )
+    seed_price_rule(
+        db_conn,
+        scope="hotel",
+        scope_id=hotel_id,
+        target_margin_bps=3000,
+        is_active=False,
+    )
+
+    rule = resolve_price_rule(db_conn, hotel_id, room_type_id, season_id)
+
+    assert rule.target_margin_bps == 1000
+    assert rule.target_margin_rule_id == global_rule_id

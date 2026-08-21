@@ -19,6 +19,8 @@ export default async function DashboardPage() {
         <Link href="/seasons">المواسم</Link>
         <br />
         <Link href="/allotments">التكلفة</Link>
+        <br />
+        <Link href="/price-rules">قواعد التسعير</Link>
         {appUser.app_role === "admin" && (
           <>
             <br />

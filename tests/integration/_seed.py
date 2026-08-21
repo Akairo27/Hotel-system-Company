@@ -95,6 +95,35 @@ def seed_allotment_night(
     return allotment_id
 
 
+def seed_actor(
+    conn: psycopg.Connection[Any], *, role: str = "admin", can_view_cost: bool = True
+) -> str:
+    """Seeds a real auth.users + app_users row and points app.actor_id at
+    it for the rest of this connection's session.
+
+    The price_rules audit trigger (migration 0018) requires app.actor_id
+    to be set on every INSERT as well as every UPDATE, and rejects a bare
+    uuid that doesn't back a real row — audit_log.changed_by is a real
+    foreign key to app_users, not just a column typed uuid. set_config's
+    third argument is False (session-scoped), not True (SET LOCAL): db_conn
+    is autocommit (see tests/conftest.py), so under autocommit each
+    execute() is its own transaction and a SET LOCAL value would already
+    have expired before the next statement — the very reset-to-empty-string
+    behavior current_actor_id() (migration 0016) exists to survive, not
+    something to lean on here.
+    """
+    row = conn.execute("INSERT INTO auth.users DEFAULT VALUES RETURNING id").fetchone()
+    assert row is not None
+    actor_uuid = str(row[0])
+    conn.execute(
+        "INSERT INTO app_users (id, full_name, app_role, can_view_cost) "
+        "VALUES (%s, 'Seeded Actor', %s, %s)",
+        (actor_uuid, role, can_view_cost),
+    )
+    conn.execute("SELECT set_config('app.actor_id', %s, false)", (actor_uuid,))
+    return actor_uuid
+
+
 def seed_price_rule(
     conn: psycopg.Connection[Any],
     *,
@@ -103,16 +132,24 @@ def seed_price_rule(
     target_margin_bps: int | None = None,
     min_profit_by_lead_time: dict[str, Any] | None = None,
     demand_curve: dict[str, Any] | None = None,
+    is_active: bool = True,
 ) -> int:
     """Inserts a price_rules row. Any field left None stays NULL — i.e.
     "this scope doesn't override this field, fall through" — per the
     field-by-field inheritance design.
+
+    Seeds a fresh actor (see seed_actor) before every call: the audit
+    trigger (migration 0018) rejects an INSERT with no app.actor_id set,
+    and this helper's callers are testing price rule resolution, not
+    audit attribution, so a throwaway actor is created each time rather
+    than asking every call site to manage one.
     """
+    seed_actor(conn)
     return returning_id(
         conn,
         "INSERT INTO price_rules (scope, scope_id, target_margin_bps, "
-        "min_profit_by_lead_time, demand_curve) VALUES (%s, %s, %s, %s, %s) "
-        "RETURNING id",
+        "min_profit_by_lead_time, demand_curve, is_active) "
+        "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
         (
             scope,
             scope_id,
@@ -121,6 +158,7 @@ def seed_price_rule(
             if min_profit_by_lead_time is not None
             else None,
             Json(demand_curve) if demand_curve is not None else None,
+            is_active,
         ),
     )
 

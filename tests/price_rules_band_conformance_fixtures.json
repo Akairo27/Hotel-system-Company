@@ -1,0 +1,300 @@
+{
+  "cases": [
+    {
+      "name": "lead_time_valid_single_open_ended_band",
+      "kind": "lead_time",
+      "bands": [
+        {
+          "min_lead_days": 0,
+          "max_lead_days": null,
+          "min_profit_halalas": 1000
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": true,
+      "expectedDefect": "valid"
+    },
+    {
+      "name": "lead_time_valid_two_contiguous_bands",
+      "kind": "lead_time",
+      "bands": [
+        {
+          "min_lead_days": 0,
+          "max_lead_days": 5,
+          "min_profit_halalas": 5000
+        },
+        {
+          "min_lead_days": 5,
+          "max_lead_days": null,
+          "min_profit_halalas": 2000
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": true,
+      "expectedDefect": "valid"
+    },
+    {
+      "name": "lead_time_gap_between_bands",
+      "kind": "lead_time",
+      "bands": [
+        {
+          "min_lead_days": 0,
+          "max_lead_days": 5,
+          "min_profit_halalas": 5000
+        },
+        {
+          "min_lead_days": 10,
+          "max_lead_days": null,
+          "min_profit_halalas": 2000
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": false,
+      "expectedDefect": "gap"
+    },
+    {
+      "name": "lead_time_overlap_between_bands",
+      "kind": "lead_time",
+      "bands": [
+        {
+          "min_lead_days": 0,
+          "max_lead_days": 10,
+          "min_profit_halalas": 5000
+        },
+        {
+          "min_lead_days": 5,
+          "max_lead_days": null,
+          "min_profit_halalas": 2000
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": false,
+      "expectedDefect": "overlap"
+    },
+    {
+      "name": "lead_time_does_not_start_at_zero",
+      "kind": "lead_time",
+      "bands": [
+        {
+          "min_lead_days": 1,
+          "max_lead_days": null,
+          "min_profit_halalas": 5000
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": false,
+      "expectedDefect": "missing_zero_start"
+    },
+    {
+      "name": "lead_time_no_open_ended_band",
+      "kind": "lead_time",
+      "bands": [
+        {
+          "min_lead_days": 0,
+          "max_lead_days": 30,
+          "min_profit_halalas": 5000
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": false,
+      "expectedDefect": "missing_open_end"
+    },
+    {
+      "name": "lead_time_negative_value",
+      "kind": "lead_time",
+      "bands": [
+        {
+          "min_lead_days": 0,
+          "max_lead_days": null,
+          "min_profit_halalas": -1
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": false,
+      "expectedDefect": "negative_value"
+    },
+    {
+      "name": "lead_time_empty_array",
+      "kind": "lead_time",
+      "bands": [],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": false,
+      "expectedDefect": "missing_key"
+    },
+    {
+      "name": "lead_time_band_missing_a_key",
+      "kind": "lead_time",
+      "bands": [
+        {
+          "min_lead_days": 0,
+          "min_profit_halalas": 1000
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": false,
+      "expectedDefect": "missing_key"
+    },
+    {
+      "name": "lead_time_band_wrong_type",
+      "kind": "lead_time",
+      "bands": [
+        {
+          "min_lead_days": 0,
+          "max_lead_days": null,
+          "min_profit_halalas": "a lot"
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": false,
+      "expectedDefect": "wrong_type"
+    },
+    {
+      "name": "occupancy_valid_single_full_range_band",
+      "kind": "occupancy",
+      "bands": [
+        {
+          "min": 0,
+          "max": 1,
+          "multiplier_bps": 10000
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": true,
+      "expectedDefect": "valid"
+    },
+    {
+      "name": "occupancy_valid_two_contiguous_bands",
+      "kind": "occupancy",
+      "bands": [
+        {
+          "min": 0,
+          "max": 0.5,
+          "multiplier_bps": 10000
+        },
+        {
+          "min": 0.5,
+          "max": 1,
+          "multiplier_bps": 15000
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": true,
+      "expectedDefect": "valid"
+    },
+    {
+      "name": "occupancy_gap_between_bands",
+      "kind": "occupancy",
+      "bands": [
+        {
+          "min": 0,
+          "max": 0.5,
+          "multiplier_bps": 10000
+        },
+        {
+          "min": 0.6,
+          "max": 1,
+          "multiplier_bps": 12500
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": false,
+      "expectedDefect": "gap"
+    },
+    {
+      "name": "occupancy_overlap_between_bands",
+      "kind": "occupancy",
+      "bands": [
+        {
+          "min": 0,
+          "max": 0.6,
+          "multiplier_bps": 10000
+        },
+        {
+          "min": 0.5,
+          "max": 1,
+          "multiplier_bps": 12500
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": false,
+      "expectedDefect": "overlap"
+    },
+    {
+      "name": "occupancy_does_not_start_at_zero",
+      "kind": "occupancy",
+      "bands": [
+        {
+          "min": 0.1,
+          "max": 1,
+          "multiplier_bps": 10000
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": false,
+      "expectedDefect": "missing_zero_start"
+    },
+    {
+      "name": "occupancy_does_not_reach_one",
+      "kind": "occupancy",
+      "bands": [
+        {
+          "min": 0,
+          "max": 0.9,
+          "multiplier_bps": 10000
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": false,
+      "expectedDefect": "missing_open_end"
+    },
+    {
+      "name": "occupancy_negative_value",
+      "kind": "occupancy",
+      "bands": [
+        {
+          "min": -0.1,
+          "max": 1,
+          "multiplier_bps": 10000
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": false,
+      "expectedDefect": "negative_value"
+    },
+    {
+      "name": "occupancy_empty_array",
+      "kind": "occupancy",
+      "bands": [],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": false,
+      "expectedDefect": "missing_key"
+    },
+    {
+      "name": "occupancy_band_missing_a_key",
+      "kind": "occupancy",
+      "bands": [
+        {
+          "min": 0,
+          "max": 1
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": false,
+      "expectedDefect": "missing_key"
+    },
+    {
+      "name": "occupancy_band_wrong_type",
+      "kind": "occupancy",
+      "bands": [
+        {
+          "min": 0,
+          "max": "all of it",
+          "multiplier_bps": 10000
+        }
+      ],
+      "valueKey": "min_profit_halalas",
+      "expectedValid": false,
+      "expectedDefect": "wrong_type"
+    }
+  ]
+}
