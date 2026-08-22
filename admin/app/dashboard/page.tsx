@@ -21,6 +21,8 @@ export default async function DashboardPage() {
         <Link href="/allotments">التكلفة</Link>
         <br />
         <Link href="/price-rules">قواعد التسعير</Link>
+        <br />
+        <Link href="/price-overrides">تجاوزات الأسعار</Link>
         {appUser.app_role === "admin" && (
           <>
             <br />

@@ -118,3 +118,22 @@ export interface PriceRuleForDashboard {
   target_margin_bps: number | null;
   min_profit_by_lead_time: MinProfitByLeadTime | null;
 }
+
+// Mirrors db/migrations/0007_price_overrides.sql's price_overrides table
+// directly — unlike PriceRuleForDashboard/AllotmentForDashboard, there is
+// no masking VIEW here (db/migrations/0021_price_overrides_admin_access.sql's
+// own comment: none of these three columns reverse-derive cost, so none go
+// behind can_view_cost). "Ended early" is not a separate flag — it is
+// expires_at set to now or earlier; services/pricing/compute.py's
+// _fetch_active_override already excludes any row where expires_at is not
+// in the future.
+export interface PriceOverride {
+  id: number;
+  hotel_id: number;
+  room_type_id: number;
+  stay_date: string;
+  ask_price_override: number;
+  min_allowed_override: number;
+  expires_at: string;
+  created_at: string;
+}
