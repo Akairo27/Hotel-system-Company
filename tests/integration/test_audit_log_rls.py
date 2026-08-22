@@ -71,6 +71,35 @@ def test_admin_without_cost_visibility_sees_non_financial_audit_rows(
     assert len(rows) == 1
 
 
+def test_admin_without_cost_visibility_sees_price_override_audit_rows(
+    db_conn: psycopg.Connection[Any], sign_in_as: Callable[[str], None]
+) -> None:
+    """migration 0022: none of price_overrides' three columns reverse-derive
+    cost -- they are final prices, not a margin or profit floor over cost
+    (migration 0021's own comment) -- so a cost-blind admin must see their
+    audit history the same as any other non-financial column."""
+    admin_id = _seed_user(db_conn, role="admin", can_view_cost=False)
+    _seed_audit_entry(
+        db_conn,
+        admin_id,
+        table_name="price_overrides",
+        column_name="ask_price_override",
+    )
+    _seed_audit_entry(
+        db_conn,
+        admin_id,
+        table_name="price_overrides",
+        column_name="min_allowed_override",
+    )
+    _seed_audit_entry(
+        db_conn, admin_id, table_name="price_overrides", column_name="expires_at"
+    )
+    sign_in_as(admin_id)
+
+    rows = db_conn.execute("SELECT * FROM audit_log").fetchall()
+    assert len(rows) == 3
+
+
 def test_admin_without_cost_visibility_cannot_see_cost_per_night(
     db_conn: psycopg.Connection[Any], sign_in_as: Callable[[str], None]
 ) -> None:

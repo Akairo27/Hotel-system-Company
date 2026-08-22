@@ -42,7 +42,7 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
     "الحد الأدنى المسموح لا يمكن أن يتجاوز سعر العرض.",
 };
 
-const GENERIC_FALLBACK_MESSAGE = "تعذر حفظ القاعدة — تحقق من صحة القيم المدخلة.";
+const GENERIC_FALLBACK_MESSAGE = "تعذر الحفظ — تحقق من صحة القيم المدخلة.";
 
 // Every actions.ts under admin/app/price-rules/ and admin/app/price-overrides/
 // should route a Supabase error through this before it ever reaches
@@ -61,7 +61,7 @@ const GENERIC_FALLBACK_MESSAGE = "تعذر حفظ القاعدة — تحقق م
 // Action is what's meant to catch that case before the RPC ever runs, so
 // reaching this function at all means something unexpected happened, and
 // showing a vague-but-Arabic message beats showing an accurate-but-raw one.
-export function translatePriceRuleError(message: string): string {
+export function translatePricingError(message: string): string {
   const match = CONSTRAINT_NAME_PATTERN.exec(message);
   if (match === null) {
     return GENERIC_FALLBACK_MESSAGE;

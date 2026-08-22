@@ -5,7 +5,7 @@ Not a test module itself (no test_ prefix), so pytest does not collect it.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import psycopg
@@ -188,6 +188,45 @@ def flat_demand_curve(multiplier_bps: int = 10_000) -> dict[str, Any]:
             }
         ],
     }
+
+
+def seed_price_override(
+    conn: psycopg.Connection[Any],
+    hotel_id: int,
+    room_type_id: int,
+    stay_date: date,
+    *,
+    ask_price_override: int = 50_000,
+    min_allowed_override: int = 40_000,
+    expires_at: datetime | None = None,
+) -> int:
+    """Inserts a price_overrides row directly, bypassing
+    admin_upsert_price_overrides -- for tests that need a pre-existing row
+    to check against (RLS reads, audit-log checks, upsert-overwrite
+    behavior) without exercising the RPC itself.
+
+    Seeds a fresh actor first (see seed_actor): the audit trigger
+    (migration 0021) rejects an INSERT with no app.actor_id set, same as
+    price_rules'. expires_at defaults 30 days out so callers that don't
+    care about expiry get an unambiguously active row.
+    """
+    seed_actor(conn)
+    if expires_at is None:
+        expires_at = datetime.now(UTC) + timedelta(days=30)
+    return returning_id(
+        conn,
+        "INSERT INTO price_overrides (hotel_id, room_type_id, stay_date, "
+        "ask_price_override, min_allowed_override, expires_at) "
+        "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+        (
+            hotel_id,
+            room_type_id,
+            stay_date,
+            ask_price_override,
+            min_allowed_override,
+            expires_at,
+        ),
+    )
 
 
 def seed_allotment_nights(
