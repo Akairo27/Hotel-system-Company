@@ -51,6 +51,19 @@ of whether tests pass.
 10. **RLS is enabled on every table, deny-by-default.** A new table
     without an RLS policy is an incomplete migration.
 
+11. **Every `FOR INSERT` or `FOR UPDATE` policy on a table must be paired
+    with a `FOR SELECT` policy covering the same rows.** Without it, the
+    write fails -- either the row is silently invisible to the write's own
+    `WHERE`/upsert resolution (zero rows affected, no error), or, for
+    `INSERT ... ON CONFLICT DO UPDATE`, Postgres denies the statement
+    outright, even when no actual conflict occurs. Confirmed the hard way
+    three times: PR D (`admin_set_allotment_cost`), PR E
+    (`admin_upsert_price_rule`), and PR F
+    (`admin_upsert_price_overrides`'s `ON CONFLICT DO UPDATE`, the
+    broadest case -- it failed even on a plain, non-conflicting insert).
+    Add the `FOR SELECT` policy in the same migration as the write policy,
+    never as an afterthought once a write mysteriously no-ops.
+
 ---
 
 ## 1. Forbidden Shortcuts
